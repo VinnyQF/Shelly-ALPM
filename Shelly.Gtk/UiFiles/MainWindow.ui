@@ -11,7 +11,11 @@
       <object class="GtkBox" id="MainBox">
         <property name="orientation">vertical</property>
         <child>
-          <object class="GtkActionBar"/>
+          <object class="GtkActionBar">
+            <child>
+              <object class="GtkButton"/>
+            </child>
+          </object>
         </child>
         <child>
           <!-- This is where different pages will be inserted -->
