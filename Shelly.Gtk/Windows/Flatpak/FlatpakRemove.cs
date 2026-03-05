@@ -12,7 +12,7 @@ public class FlatpakRemove(IUnprivilegedOperationService unprivilegedOperationSe
     private List<FlatpakPackageDto> _allPackages = [];
     private string _searchText = string.Empty;
 
-    public Box CreateWindow()
+    public Widget CreateWindow()
     {
         var builder = Builder.NewFromFile("UiFiles/Flatpak/FlatpakRemoveWindow.ui");
         var box = (Box)builder.GetObject("FlatpakRemoveWindow")!;

@@ -15,7 +15,7 @@ public class FlatpakInstall(IUnprivilegedOperationService unprivilegedOperationS
     private string _searchText = string.Empty;
     private FlatpakCategories _selectedCategory = FlatpakCategories.None;
 
-    public Box CreateWindow()
+    public Widget CreateWindow()
     {
         var builder = Builder.NewFromFile("UiFiles/Flatpak/FlatpakInstallWindow.ui");
         var box = (Box)builder.GetObject("FlatpakInstallWindow")!;

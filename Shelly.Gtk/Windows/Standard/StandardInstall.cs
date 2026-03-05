@@ -4,8 +4,9 @@ namespace Shelly.Gtk.Windows.Standard;
 
 public class StandardInstall : IShellyWindow
 {
-    public Box CreateWindow()
+    public Widget CreateWindow()
     {
-        throw new NotImplementedException();
+        var builder = Builder.NewFromFile("UiFiles/Package/PackageWindow.ui");
+        return (Overlay)builder.GetObject("PackageWindow")!;
     }
 }

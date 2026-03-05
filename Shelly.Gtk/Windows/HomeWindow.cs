@@ -16,7 +16,7 @@ public class HomeWindow(
 {
     private Box _box = null!;
 
-    public Box CreateWindow()
+    public Widget CreateWindow()
     {
         var builder = Builder.NewFromFile("UiFiles/HomeWindow.ui");
         _box = (Box)builder.GetObject("HomeWindow")!;

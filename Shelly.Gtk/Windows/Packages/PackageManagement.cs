@@ -14,7 +14,7 @@ public class PackageManagement(IPrivilegedOperationService privilegedOperationSe
     private List<AlpmPackageDto> _allPackages = [];
     private string _searchText = string.Empty;
 
-    public Box CreateWindow()
+    public Widget CreateWindow()
     {
         var builder = Builder.NewFromFile("UiFiles/Package/PackageManagement.ui");
         _box = (Box)builder.GetObject("PackageManagement")!;

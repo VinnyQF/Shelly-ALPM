@@ -4,6 +4,7 @@ using Shelly.Gtk.Services;
 using Shelly.Gtk.Windows;
 using Shelly.Gtk.Windows.Flatpak;
 using Shelly.Gtk.Windows.Packages;
+using Shelly.Gtk.Windows.Standard;
 
 namespace Shelly.Gtk;
 
@@ -53,14 +54,14 @@ sealed class Program
                 while (contentArea.GetFirstChild() is { } child)
                     contentArea.Remove(child);
 
-                var window = serviceProvider.GetRequiredService<T>();
-                contentArea.Append(window.CreateWindow());
+                var page = serviceProvider.GetRequiredService<T>();
+                contentArea.Append(page.CreateWindow());
             }
 
             homeButton.OnClicked += (_, _) => NavigateTo<HomeWindow>();
             settingsButton.OnClicked += (_, _) => NavigateTo<FlatpakUpdate>(); 
 
-            AddAction("install-packages", NavigateTo<HomeWindow>); 
+            AddAction("install-packages", NavigateTo<StandardInstall>); 
             AddAction("update-packages", NavigateTo<HomeWindow>); // Placeholder
             AddAction("manage-packages", NavigateTo<PackageManagement>); // Placeholder
 
@@ -106,6 +107,7 @@ sealed class Program
         collection.AddTransient<FlatpakInstall>();
         collection.AddTransient<FlatpakUpdate>();
         collection.AddTransient<PackageManagement>();
+        collection.AddTransient<StandardInstall>();
         return collection.BuildServiceProvider();
     }
 }
