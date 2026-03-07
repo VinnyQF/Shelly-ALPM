@@ -15,20 +15,29 @@ public class PackageManagement(IPrivilegedOperationService privilegedOperationSe
     private FilterListModel _filterListModel = null!;
     private CustomFilter _filter = null!;
     private string _searchText = string.Empty;
+    private Dictionary<ListItem, EventHandler> _checkBinding = [];
+    private SignalListItemFactory _checkFactory = null!;
+    private SignalListItemFactory _nameFactory = null!;
+    private SignalListItemFactory _sizeFactory = null!;
+    private SignalListItemFactory _versionFactory = null!;
+    private SearchEntry _searchEntry = null!;
+    private Button _refreshButton = null!;
+    private Button _removeButton = null!;
 
     public Widget CreateWindow()
     {
         var builder = Builder.NewFromFile("UiFiles/Package/PackageManagement.ui");
         _box = (Box)builder.GetObject("PackageManagement")!;
         _columnView = (ColumnView)builder.GetObject("package_grid")!;
-        var searchEntry = (SearchEntry)builder.GetObject("search_entry")!;
+        _searchEntry = (SearchEntry)builder.GetObject("search_entry")!;
 
         var checkColumn = (ColumnViewColumn)builder.GetObject("check_column")!;
         var nameColumn = (ColumnViewColumn)builder.GetObject("name_column")!;
         var sizeColumn = (ColumnViewColumn)builder.GetObject("size_column")!;
         var versionColumn = (ColumnViewColumn)builder.GetObject("version_column")!;
-        var refreshButton = (Button)builder.GetObject("sync_button")!;
-        var removeButton = (Button)builder.GetObject("remove_button")!;
+        
+        _refreshButton = (Button)builder.GetObject("sync_button")!;
+        _removeButton  = (Button)builder.GetObject("remove_button")!;
 
         _listStore = Gio.ListStore.New(AlpmPackageGObject.GetGType());
         _filter = CustomFilter.New(FilterPackage);
@@ -48,21 +57,21 @@ public class PackageManagement(IPrivilegedOperationService privilegedOperationSe
                 pkgObj.ToggleSelection();
             }
         };
-        searchEntry.OnSearchChanged += (_, _) =>
+        _searchEntry.OnSearchChanged += (_, _) =>
         {
-            _searchText = searchEntry.GetText();
+            _searchText = _searchEntry.GetText();
             ApplyFilter();
         };
-        removeButton.OnClicked += (_, _) => { _ = RemoveSelectedAsync(); };
-        refreshButton.OnClicked += (_, _) => { _ = LoadDataAsync(); };
+        _removeButton.OnClicked += (_, _) => { _ = RemoveSelectedAsync(); };
+        _refreshButton.OnClicked += (_, _) => { _ = LoadDataAsync(); };
         
         return _box;
     }
 
-    private static void SetupColumns(ColumnViewColumn checkColumn, ColumnViewColumn nameColumn, ColumnViewColumn sizeColumn, ColumnViewColumn versionColumn)
+    private void SetupColumns(ColumnViewColumn checkColumn, ColumnViewColumn nameColumn, ColumnViewColumn sizeColumn, ColumnViewColumn versionColumn)
     {
-        var checkFactory = SignalListItemFactory.New();
-        checkFactory.OnSetup += (_, args) =>
+        _checkFactory = SignalListItemFactory.New();
+        _checkFactory.OnSetup += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             var check = new CheckButton { MarginStart = 10, MarginEnd = 10 };
@@ -77,7 +86,7 @@ public class PackageManagement(IPrivilegedOperationService privilegedOperationSe
             };
         };
 
-        checkFactory.OnBind += (_, args) =>
+        _checkFactory.OnBind += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             if (listItem.GetItem() is not AlpmPackageGObject pkgObj ||
@@ -86,6 +95,7 @@ public class PackageManagement(IPrivilegedOperationService privilegedOperationSe
             checkButton.SetActive(pkgObj.IsSelected);
 
             pkgObj.OnSelectionToggled += OnExternalToggle;
+            _checkBinding[listItem] = OnExternalToggle;
             return;
 
             void OnExternalToggle(object? s, EventArgs e)
@@ -97,16 +107,23 @@ public class PackageManagement(IPrivilegedOperationService privilegedOperationSe
             }
         };
 
-        checkColumn.SetFactory(checkFactory);
+        _checkFactory.OnUnbind += (_, args) =>
+        {
+            var listItem = (ListItem)args.Object;
+            if (listItem.GetItem() is not AlpmPackageGObject pkgObj) return;
+            if (_checkBinding.Remove(listItem, out var handler))
+                pkgObj.OnSelectionToggled -= handler;
+        };
+        checkColumn.SetFactory(_checkFactory);
         
-        var nameFactory = SignalListItemFactory.New();
-        nameFactory.OnSetup += (_, args) =>
+        _nameFactory = SignalListItemFactory.New();
+        _nameFactory.OnSetup += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             var label = Label.New(string.Empty);
             listItem.SetChild(label);
         };
-        nameFactory.OnBind += (_, args) =>
+        _nameFactory.OnBind += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             if (listItem.GetItem() is not AlpmPackageGObject { Package: { } pkg } ||
@@ -114,16 +131,16 @@ public class PackageManagement(IPrivilegedOperationService privilegedOperationSe
             label.SetText(pkg.Name);
             label.Halign = Align.Start;
         };
-        nameColumn.SetFactory(nameFactory);
+        nameColumn.SetFactory(_nameFactory);
         
-        var sizeFactory = SignalListItemFactory.New();
-        sizeFactory.OnSetup += (_, args) =>
+        _sizeFactory  = SignalListItemFactory.New();
+        _sizeFactory.OnSetup += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             var label = Label.New(string.Empty);
             listItem.SetChild(label);
         };
-        sizeFactory.OnBind += (_, args) =>
+        _sizeFactory.OnBind += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             if (listItem.GetItem() is not AlpmPackageGObject { Package: { } pkg } ||
@@ -131,16 +148,16 @@ public class PackageManagement(IPrivilegedOperationService privilegedOperationSe
             label.SetText(SizeHelpers.FormatSize(pkg.InstalledSize));
             label.Halign = Align.End;
         };
-        sizeColumn.SetFactory(sizeFactory);
+        sizeColumn.SetFactory(_sizeFactory);
         
-        var versionFactory = SignalListItemFactory.New();
-        versionFactory.OnSetup += (_, args) =>
+        _versionFactory = SignalListItemFactory.New();
+        _versionFactory.OnSetup += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             var label = Label.New(string.Empty);
             listItem.SetChild(label);
         };
-        versionFactory.OnBind += (_, args) =>
+        _versionFactory.OnBind += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             if (listItem.GetItem() is not AlpmPackageGObject { Package: { } pkg } ||
@@ -148,7 +165,7 @@ public class PackageManagement(IPrivilegedOperationService privilegedOperationSe
             label.SetText(pkg.Version);
             label.Halign = Align.End;
         };
-        versionColumn.SetFactory(versionFactory);
+        versionColumn.SetFactory(_versionFactory);
     }
 
     private bool FilterPackage(GObject.Object obj)
@@ -161,12 +178,6 @@ public class PackageManagement(IPrivilegedOperationService privilegedOperationSe
 
         return pkgObj.Package.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
                pkgObj.Package.Description.Contains(_searchText, StringComparison.OrdinalIgnoreCase);
-    }
-
-    public void Dispose()
-    {
-        _cts.Cancel();
-        _cts.Dispose();
     }
 
     private async Task LoadDataAsync(CancellationToken ct = default)
@@ -226,5 +237,47 @@ public class PackageManagement(IPrivilegedOperationService privilegedOperationSe
                 //always exit globally busy in case of failure
             }
         }
+    }
+    
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        
+        _columnView.Dispose();
+        _columnView.SetModel(null);
+        
+        for (uint i = 0; i < _listStore.GetNItems(); i++)
+        {
+            if (_listStore.GetObject(i) is not AlpmPackageGObject pkgObj) continue;
+            pkgObj.Package = null;
+            pkgObj.Dispose();
+        }
+
+        _listStore.RemoveAll();
+        
+        _searchText = string.Empty;
+
+        _selectionModel.Dispose();
+        _filterListModel.Dispose();
+        _filter.Dispose();
+        _listStore.Dispose();
+
+        _checkBinding.Clear();
+        _checkBinding = null!;
+        _searchEntry.Dispose();
+        _refreshButton.Dispose();
+        _removeButton.Dispose();
+        
+        _box.Dispose();
+        
+        _checkFactory.Dispose();
+        _nameFactory.Dispose();
+        _sizeFactory.Dispose();
+        _versionFactory.Dispose();
+
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
     }
 }

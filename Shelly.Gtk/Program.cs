@@ -1,6 +1,7 @@
 ﻿using Gtk;
 using Microsoft.Extensions.DependencyInjection;
 using Shelly.Gtk.Services;
+using Shelly.Gtk.UiModels;
 using Shelly.Gtk.Windows;
 using Shelly.Gtk.Windows.AUR;
 using Shelly.Gtk.Windows.Dialog;
@@ -99,6 +100,17 @@ sealed class Program
                     return false;
                 });
             };
+            
+            var alpmEventService = serviceProvider.GetRequiredService<IAlpmEventService>();
+            alpmEventService.Question += (s, e) =>
+            {
+                GLib.Functions.IdleAdd(0, () =>
+                {
+                    var dialog = serviceProvider.GetRequiredService<AlpmEventDialog>();
+                    AlpmEventDialog.ShowAlpmEventDialog(e);
+                    return false;
+                });
+            };
 
 
             window.Show();
@@ -157,6 +169,7 @@ sealed class Program
         collection.AddTransient<PackageUpdate>();
         collection.AddTransient<PackageInstall>();
         collection.AddTransient<PasswordDialog>();
+        collection.AddTransient<AlpmEventDialog>();
         return collection.BuildServiceProvider();
     }
 }

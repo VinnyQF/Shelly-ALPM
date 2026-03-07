@@ -1,5 +1,4 @@
 using Gtk;
-using Shelly.Gtk.Helpers;
 using Shelly.Gtk.Services;
 using Shelly.Gtk.UiModels.PackageManagerObjects.GObjects;
 
@@ -14,6 +13,11 @@ public class PackageUpdate(IPrivilegedOperationService privilegedOperationServic
     private FilterListModel _filterListModel = null!;
     private CustomFilter _filter = null!;
     private string _searchText = string.Empty;
+    private Dictionary<ListItem, EventHandler> _checkBinding = [];
+    private SignalListItemFactory _checkFactory = null!;
+    private SignalListItemFactory _nameFactory = null!;
+    private SignalListItemFactory _sizeFactory = null!;
+    private SignalListItemFactory _versionFactory = null!;
 
     public Widget CreateWindow()
     {
@@ -58,10 +62,10 @@ public class PackageUpdate(IPrivilegedOperationService privilegedOperationServic
         return _box;
     }
 
-    private static void SetupColumns(ColumnViewColumn checkColumn, ColumnViewColumn nameColumn, ColumnViewColumn sizeColumn, ColumnViewColumn versionColumn)
+    private void SetupColumns(ColumnViewColumn checkColumn, ColumnViewColumn nameColumn, ColumnViewColumn sizeColumn, ColumnViewColumn versionColumn)
     {
-        var checkFactory = SignalListItemFactory.New();
-        checkFactory.OnSetup += (_, args) =>
+        _checkFactory = SignalListItemFactory.New();
+        _checkFactory.OnSetup += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             var check = new CheckButton { MarginStart = 10, MarginEnd = 10 };
@@ -76,7 +80,7 @@ public class PackageUpdate(IPrivilegedOperationService privilegedOperationServic
             };
         };
 
-        checkFactory.OnBind += (_, args) =>
+        _checkFactory.OnBind += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             if (listItem.GetItem() is not AlpmUpdateGObject pkgObj ||
@@ -85,6 +89,7 @@ public class PackageUpdate(IPrivilegedOperationService privilegedOperationServic
             checkButton.SetActive(pkgObj.IsSelected);
 
             pkgObj.OnSelectionToggled += OnExternalToggle;
+            _checkBinding[listItem] = OnExternalToggle;
             return;
 
             void OnExternalToggle(object? s, EventArgs e)
@@ -96,16 +101,23 @@ public class PackageUpdate(IPrivilegedOperationService privilegedOperationServic
             }
         };
 
-        checkColumn.SetFactory(checkFactory);
+        _checkFactory.OnUnbind += (_, args) =>
+        {
+            var listItem = (ListItem)args.Object;
+            if (listItem.GetItem() is not AlpmPackageGObject pkgObj) return;
+            if (_checkBinding.Remove(listItem, out var handler))
+                pkgObj.OnSelectionToggled -= handler;
+        };
+        checkColumn.SetFactory(_checkFactory);
         
-        var nameFactory = SignalListItemFactory.New();
-        nameFactory.OnSetup += (_, args) =>
+        _nameFactory = SignalListItemFactory.New();
+        _nameFactory.OnSetup += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             var label = Label.New(string.Empty);
             listItem.SetChild(label);
         };
-        nameFactory.OnBind += (_, args) =>
+        _nameFactory.OnBind += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             if (listItem.GetItem() is not AlpmUpdateGObject { Package: { } pkg } ||
@@ -113,16 +125,16 @@ public class PackageUpdate(IPrivilegedOperationService privilegedOperationServic
             label.SetText(pkg.Name);
             label.Halign = Align.Start;
         };
-        nameColumn.SetFactory(nameFactory);
+        nameColumn.SetFactory(_nameFactory);
         
-        var sizeFactory = SignalListItemFactory.New();
-        sizeFactory.OnSetup += (_, args) =>
+        _sizeFactory = SignalListItemFactory.New();
+        _sizeFactory.OnSetup += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             var label = Label.New(string.Empty);
             listItem.SetChild(label);
         };
-        sizeFactory.OnBind += (_, args) =>
+        _sizeFactory.OnBind += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             if (listItem.GetItem() is not AlpmUpdateGObject { Package: { } pkg } ||
@@ -130,16 +142,16 @@ public class PackageUpdate(IPrivilegedOperationService privilegedOperationServic
             label.SetText(pkg.NewVersion);
             label.Halign = Align.End;
         };
-        sizeColumn.SetFactory(sizeFactory);
+        sizeColumn.SetFactory(_sizeFactory);
         
-        var versionFactory = SignalListItemFactory.New();
-        versionFactory.OnSetup += (_, args) =>
+        _versionFactory = SignalListItemFactory.New();
+        _versionFactory.OnSetup += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             var label = Label.New(string.Empty);
             listItem.SetChild(label);
         };
-        versionFactory.OnBind += (_, args) =>
+        _versionFactory.OnBind += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
             if (listItem.GetItem() is not AlpmUpdateGObject { Package: { } pkg } ||
@@ -147,7 +159,7 @@ public class PackageUpdate(IPrivilegedOperationService privilegedOperationServic
             label.SetText(pkg.CurrentVersion);
             label.Halign = Align.End;
         };
-        versionColumn.SetFactory(versionFactory);
+        versionColumn.SetFactory(_versionFactory);
     }
 
     private bool FilterPackage(GObject.Object obj)
@@ -226,6 +238,37 @@ public class PackageUpdate(IPrivilegedOperationService privilegedOperationServic
 
     public void Dispose()
     {
+        _columnView.Dispose();
+        _columnView.SetModel(null);
         
+        for (uint i = 0; i < _listStore.GetNItems(); i++)
+        {
+            if (_listStore.GetObject(i) is not AlpmPackageGObject pkgObj) continue;
+            pkgObj.Package = null;
+            pkgObj.Dispose();
+        }
+
+        _listStore.RemoveAll();
+        
+        _searchText = string.Empty;
+
+        _selectionModel.Dispose();
+        _filterListModel.Dispose();
+        _filter.Dispose();
+        _listStore.Dispose();
+
+        _checkBinding.Clear();
+        _checkBinding = null!;
+        
+        _box.Dispose();
+        
+        _checkFactory.Dispose();
+        _nameFactory.Dispose();
+        _sizeFactory.Dispose();
+        _versionFactory.Dispose();
+
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
     }
 }
