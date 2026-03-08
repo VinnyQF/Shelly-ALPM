@@ -9,6 +9,7 @@ using Shelly.Gtk.Windows.Flatpak;
 using Shelly.Gtk.Helpers;
 using Shelly.Gtk.Windows.Packages;
 using Shelly.Gtk.UiModels;
+using Tmds.DBus.Protocol;
 using Settings = Shelly.Gtk.Windows.Settings;
 
 namespace Shelly.Gtk;
@@ -19,14 +20,21 @@ sealed class Program
     {
         ServiceCollection serviceCollection = new();
         var serviceProvider = ServiceBuilder.CreateDependencyInjection(serviceCollection);
-
-        var application = Application.New("com.shellyorg.shelly", Gio.ApplicationFlags.DefaultFlags);
-
+        
+        var application = Application.New(ShellyConstants.Service, Gio.ApplicationFlags.DefaultFlags);
+        
+        
         application.OnActivate += (sender, _) =>
         {
             //Tray service will need to be update to point at GTK Install
             //or tray service will need to know if avalonia or GTK started it.
             TrayStartService.Start();
+            
+            var existingWindow = application.GetActiveWindow();
+            if (existingWindow != null) {
+                existingWindow.Present();
+                return;
+            }
             
             var cssProvider = CssProvider.New();
             cssProvider.LoadFromString(ResourceHelper.LoadAsset("Assets/style.css"));
