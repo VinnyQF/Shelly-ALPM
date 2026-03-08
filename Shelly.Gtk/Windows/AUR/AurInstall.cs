@@ -37,8 +37,12 @@ public class AurInstall(
         _selectionModel = SingleSelection.New(_listStore);
         _selectionModel.CanUnselect = true;
         _columnView.SetModel(_selectionModel);
-
+        
         SetupColumns(checkColumn, nameColumn, votesColumn, popColumn, versionColumn);
+        
+        ColumnViewHelper.AlignColumnHeader(_columnView, 1, Align.End);
+        ColumnViewHelper.AlignColumnHeader(_columnView, 2, Align.End);
+        ColumnViewHelper.AlignColumnHeader(_columnView, 3, Align.End);
 
         _columnView.OnActivate += (_, _) =>
         {

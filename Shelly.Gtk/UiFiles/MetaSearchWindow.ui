@@ -41,7 +41,7 @@
                 <property name="title">Version</property>
               </object>
             </child>
-             <child>
+            <child>
               <object class="GtkColumnViewColumn" id="check_column">
                 <property name="fixed-width">40</property>
               </object>

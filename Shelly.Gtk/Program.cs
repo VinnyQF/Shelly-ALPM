@@ -32,6 +32,9 @@ sealed class Program
             cssProvider.LoadFromString(ResourceHelper.LoadAsset("Assets/style.css"));
             StyleContext.AddProviderForDisplay(Gdk.Display.GetDefault()!, cssProvider, 800);
 
+            var iconTheme = IconTheme.GetForDisplay(Gdk.Display.GetDefault()!);
+            iconTheme.AddSearchPath("Assets/svg");
+            
             var mainBuilder = Builder.NewFromString(ResourceHelper.LoadUiFile("UiFiles/MainWindow.ui"), -1);
             var window = (ApplicationWindow)mainBuilder.GetObject("MainWindow")!;
 

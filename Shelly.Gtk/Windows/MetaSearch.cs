@@ -49,6 +49,9 @@ public class MetaSearch(
         _columnView.SetModel(_selectionModel);
 
         SetupColumns(checkColumn, nameColumn, repoColumn, versionColumn);
+
+        ColumnViewHelper.AlignColumnHeader(_columnView, 1, Align.End);
+        ColumnViewHelper.AlignColumnHeader(_columnView, 2, Align.End);
         
         _installButton.OnClicked += (_, _) => { _ = InstallSelectedAsync(); };
 

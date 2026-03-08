@@ -37,6 +37,8 @@ public class AurUpdate(IPrivilegedOperationService privilegedOperationService, I
         _columnView.SetModel(_selectionModel);
 
         SetupColumns(checkColumn, nameColumn, versionColumn);
+        
+        ColumnViewHelper.AlignColumnHeader(_columnView, 1, Align.End);
 
         _columnView.OnRealize += (_, _) => { _ = LoadDataAsync(_cts.Token); };
         _columnView.OnActivate += (_, _) =>

@@ -46,6 +46,10 @@ public class PackageInstall(IPrivilegedOperationService privilegedOperationServi
         _columnView.SetModel(_selectionModel);
         SetupColumns(checkColumn, nameColumn, sizeColumn, versionColumn, repositoryColumn);
 
+        ColumnViewHelper.AlignColumnHeader(_columnView, 1, Align.End);
+        ColumnViewHelper.AlignColumnHeader(_columnView, 2, Align.End);
+        ColumnViewHelper.AlignColumnHeader(_columnView, 3, Align.End);
+
         _columnView.OnRealize += (_, _) => { _ = LoadDataAsync(_cts.Token); };
         _columnView.OnActivate += (_, _) =>
         {
