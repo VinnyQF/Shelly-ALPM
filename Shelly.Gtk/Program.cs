@@ -8,8 +8,6 @@ using Shelly.Gtk.Windows.Dialog;
 using Shelly.Gtk.Windows.Flatpak;
 using Shelly.Gtk.Helpers;
 using Shelly.Gtk.Windows.Packages;
-using Shelly.Gtk.UiModels;
-using Tmds.DBus.Protocol;
 using Settings = Shelly.Gtk.Windows.Settings;
 
 namespace Shelly.Gtk;
@@ -28,7 +26,8 @@ sealed class Program
         {
             //Tray service will need to be update to point at GTK Install
             //or tray service will need to know if avalonia or GTK started it.
-            TrayStartService.Start();
+            if(serviceProvider!.GetService<IConfigService>()!.LoadConfig().TrayEnabled)
+                TrayStartService.Start();
             
             var existingWindow = application.GetActiveWindow();
             if (existingWindow != null) {
@@ -204,6 +203,11 @@ sealed class Program
                 }
 
                 var page = serviceProvider.GetRequiredService<T>();
+                if (page is Settings settings)
+                {
+                    settings.NavigationToHomeRequested += NavigateTo<HomeWindow>;
+                }
+                
                 if (page is MetaSearch metaSearch && query != null)
                 {
                     contentArea.Append(metaSearch.CreateWindow(query));
