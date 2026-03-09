@@ -18,6 +18,11 @@ public class AurInstall(
     private Gio.ListStore _listStore = null!;
     private string _searchText = string.Empty;
     private SearchEntry _searchEntry = null!;
+    private SignalListItemFactory _checkFactory = null!;
+    private SignalListItemFactory _nameFactory = null!;
+    private SignalListItemFactory _votesFactory = null!;
+    private SignalListItemFactory _popFactory = null!;
+    private SignalListItemFactory _versionFactory = null!;
 
     public Widget CreateWindow()
     {
@@ -37,8 +42,12 @@ public class AurInstall(
         _selectionModel = SingleSelection.New(_listStore);
         _selectionModel.CanUnselect = true;
         _columnView.SetModel(_selectionModel);
-
+        
         SetupColumns(checkColumn, nameColumn, votesColumn, popColumn, versionColumn);
+        
+        ColumnViewHelper.AlignColumnHeader(_columnView, 1, Align.End);
+        ColumnViewHelper.AlignColumnHeader(_columnView, 2, Align.End);
+        ColumnViewHelper.AlignColumnHeader(_columnView, 3, Align.End);
 
         _columnView.OnActivate += (_, _) =>
         {
@@ -54,10 +63,10 @@ public class AurInstall(
         return _box;
     }
 
-    private static void SetupColumns(ColumnViewColumn checkColumn, ColumnViewColumn nameColumn,
+    private void SetupColumns(ColumnViewColumn checkColumn, ColumnViewColumn nameColumn,
         ColumnViewColumn votesColumn, ColumnViewColumn popColumn, ColumnViewColumn versionColumn)
     {
-        var checkFactory = SignalListItemFactory.New();
+        var checkFactory = _checkFactory = SignalListItemFactory.New();
         checkFactory.OnSetup += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
@@ -95,7 +104,7 @@ public class AurInstall(
 
         checkColumn.SetFactory(checkFactory);
         
-        var nameFactory = SignalListItemFactory.New();
+        var nameFactory = _nameFactory = SignalListItemFactory.New();
         nameFactory.OnSetup += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
@@ -112,7 +121,7 @@ public class AurInstall(
         };
         nameColumn.SetFactory(nameFactory);
         
-        var votesFactory = SignalListItemFactory.New();
+        var votesFactory = _votesFactory = SignalListItemFactory.New();
         votesFactory.OnSetup += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
@@ -129,7 +138,7 @@ public class AurInstall(
         };
         votesColumn.SetFactory(votesFactory);
         
-        var sizeFactory = SignalListItemFactory.New();
+        var sizeFactory = _popFactory = SignalListItemFactory.New();
         sizeFactory.OnSetup += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
@@ -146,7 +155,7 @@ public class AurInstall(
         };
         popColumn.SetFactory(sizeFactory);
         
-        var versionFactory = SignalListItemFactory.New();
+        var versionFactory = _versionFactory = SignalListItemFactory.New();
         versionFactory.OnSetup += (_, args) =>
         {
             var listItem = (ListItem)args.Object;
@@ -198,6 +207,40 @@ public class AurInstall(
     {
         _cts.Cancel();
         _cts.Dispose();
+
+        // Disconnect the model from the view to break circular refs
+        _columnView.SetModel(null);
+
+        // Dispose all GObject items BEFORE removing them
+        for (uint i = 0; i < _listStore.GetNItems(); i++)
+        {
+            if (_listStore.GetObject(i) is AurPackageGObject pkgObj)
+            {
+                pkgObj.Package = null;
+                pkgObj.Dispose();
+            }
+        }
+
+        _listStore.RemoveAll();
+
+        _selectionModel.Dispose();
+        _listStore.Dispose();
+
+        _checkFactory.Dispose();
+        _nameFactory.Dispose();
+        _votesFactory.Dispose();
+        _popFactory.Dispose();
+        _versionFactory.Dispose();
+
+        _columnView = null!;
+        _box = null!;
+        _selectionModel = null!;
+        _listStore = null!;
+        _searchEntry = null!;
+
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
     }
 
     private async Task InstallSelectedAsync()
@@ -241,10 +284,15 @@ public class AurInstall(
 
                 foreach (var pkgbuild in packageBuilds)
                 {
-                    /*var dialog = new PackageBuildDialog();
-                    var dialogResult = pkgbuild.PkgBuild != null && await dialog.ShowDialog($"Displaying Package Build {pkgbuild.Name}",
-                        pkgbuild.PkgBuild);
-                    if (!dialogResult) return;*/
+                    if (pkgbuild.PkgBuild == null) continue;
+                    
+                    var buildArgs = new PackageBuildEventArgs($"Displaying Package Build {pkgbuild.Name}", pkgbuild.PkgBuild);
+                    genericQuestionService.RaisePackageBuild(buildArgs);
+                    
+                    if (!await buildArgs.ResponseTask)
+                    {
+                        return;
+                    }
                 }
                 
                 var result = await privilegedOperationService.InstallAurPackagesAsync(selectedPackages);

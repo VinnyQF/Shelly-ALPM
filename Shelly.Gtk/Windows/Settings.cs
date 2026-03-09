@@ -1,6 +1,7 @@
 using Gtk;
 using Shelly.Gtk.Helpers;
 using Shelly.Gtk.Services;
+using Shelly.Gtk.Services.TrayServices;
 using Shelly.Gtk.UiModels;
 using Shelly.Gtk.Windows.Dialog;
 
@@ -15,6 +16,8 @@ public class Settings(
 {
     private Box _box = null!;
     private ShellyConfig _config = null!;
+    
+    public event Action? NavigationToHomeRequested;
 
     public Widget CreateWindow()
     {
@@ -25,7 +28,7 @@ public class Settings(
         
         SetupAurSwitch("aur_switch", _config.AurEnabled, (v) => _config.AurEnabled = v, builder);
         SetupSwitch("flatpak_switch", _config.FlatPackEnabled, (v) => _config.FlatPackEnabled = v, builder);
-        SetupSwitch("tray_switch", _config.TrayEnabled, (v) => _config.TrayEnabled = v, builder);
+        SetupTraySwitch("tray_switch", _config.TrayEnabled, (v) => _config.TrayEnabled = v, builder);
         SetupSwitch("no_confirm_switch", _config.NoConfirm, (v) => _config.NoConfirm = v, builder);
 
         var traySpin = (SpinButton)builder.GetObject("tray_interval_spin")!;
@@ -42,11 +45,11 @@ public class Settings(
         var checkUpdatesButton = (Button)builder.GetObject("check_updates_button")!;
         checkUpdatesButton.OnClicked += (s, e) => { _ = CheckUpdatesAsync(); };
 
-        /*var githubButton = (Button)builder.GetObject("github_button")!;
-        githubButton.OnClicked += (s, e) => { OpenUrl("https://github.com/shelly-alpm/Shelly-ALPM"); };
+        var saveButton = (Button)builder.GetObject("save_button")!;
+        saveButton.OnClicked += (s, e) => { NavigationToHomeRequested?.Invoke(); };
 
-        var coffeeButton = (Button)builder.GetObject("coffee_button")!;
-        coffeeButton.OnClicked += (s, e) => { OpenUrl("https://www.buymeacoffee.com/shellyalpm"); };*/
+        var versionLabel = (Label)builder.GetObject("version_label")!;
+        versionLabel.SetLabel($"v{System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "Unknown"}");
 
         return _box;
     }
@@ -80,6 +83,28 @@ public class Settings(
             return false;
         };
     }
+    
+    private void SetupTraySwitch(string id, bool initialValue, Action<bool> updateAction, Builder builder)
+    {
+        var sw = (Switch)builder.GetObject(id)!;
+        sw.Active = initialValue;
+        sw.OnStateSet += (s, e) =>
+        {
+            if (e.State)
+            {
+               TrayStartService.Start();
+            }
+            else
+            {
+                TrayStartService.End();
+            }
+
+            updateAction(e.State);
+            SaveConfig();
+            return false;
+        };
+    }
+
 
     private async Task HandleAurConfirmationAsync(Switch sw, Action<bool> updateAction)
     {
@@ -132,24 +157,14 @@ public class Settings(
      
     }
 
-    private void OpenUrl(string url)
-    {
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = url,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error opening URL: {ex.Message}");
-        }
-    }
-
     public void Dispose()
     {
         _box.Dispose();
+        _box = null!;
+        _config = null!;
+
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
     }
 }

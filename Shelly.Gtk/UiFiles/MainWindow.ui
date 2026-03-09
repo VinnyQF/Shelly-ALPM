@@ -80,6 +80,7 @@
                             <child>
                               <object class="GtkImage">
                                 <property name="icon-name">package-x-generic-symbolic</property>
+                                 <property name="pixel-size">16</property>
                               </object>
                             </child>
                             <child>
@@ -96,16 +97,15 @@
                         <property name="menu-model">AurMenu</property>
                         <property name="has-frame">false</property>
                         <style>
-                          <class name="nav-button"/>
                         </style>
-                       
                         <child>
                           <object class="GtkBox">
                             <property name="orientation">horizontal</property>
                             <property name="spacing">8</property>
                             <child>
                               <object class="GtkImage">
-                                <property name="icon-name">software-update-available-symbolic</property>
+                                <property name="icon-name">arch-symbolic</property>
+                                <property name="pixel-size">18</property>
                               </object>
                             </child>
                             <child>
@@ -121,17 +121,14 @@
                       <object class="GtkMenuButton" id="FlatpakMenuButton">
                         <property name="menu-model">FlatpakMenu</property>
                         <property name="has-frame">false</property>
-                        <style>
-                          <class name="nav-button"/>
-                        </style>
-                       
                         <child>
                           <object class="GtkBox">
                             <property name="orientation">horizontal</property>
                             <property name="spacing">8</property>
                             <child>
                               <object class="GtkImage">
-                                <property name="icon-name">package-x-generic-symbolic</property>
+                                <property name="icon-name">flatpak-symbolic</property>
+                                <property name="pixel-size">16</property>
                               </object>
                             </child>
                             <child>
@@ -145,7 +142,7 @@
                     </child>
                       <child>
                       <object class="GtkSearchEntry" id="MainSearchEntry">
-                        <property name="placeholder-text">Search all repositories...</property>
+                        <property name="placeholder-text">Search all sources...</property>
                         <property name="width-request">250</property>
                         <property name="margin-start">10</property>
                         <property name="margin-end">10</property>

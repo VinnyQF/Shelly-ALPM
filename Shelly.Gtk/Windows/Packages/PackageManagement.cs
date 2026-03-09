@@ -53,6 +53,9 @@ public class PackageManagement(
 
         SetupColumns(checkColumn, nameColumn, sizeColumn, versionColumn);
 
+        ColumnViewHelper.AlignColumnHeader(_columnView, 1, Align.End);
+        ColumnViewHelper.AlignColumnHeader(_columnView, 2, Align.End);
+
         _columnView.OnRealize += (_, _) => { _ = LoadDataAsync(_cts.Token); };
         _columnView.OnActivate += (_, _) =>
         {

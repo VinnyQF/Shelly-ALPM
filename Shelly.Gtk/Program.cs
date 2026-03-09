@@ -8,7 +8,6 @@ using Shelly.Gtk.Windows.Dialog;
 using Shelly.Gtk.Windows.Flatpak;
 using Shelly.Gtk.Helpers;
 using Shelly.Gtk.Windows.Packages;
-using Shelly.Gtk.UiModels;
 using Settings = Shelly.Gtk.Windows.Settings;
 
 namespace Shelly.Gtk;
@@ -19,19 +18,30 @@ sealed class Program
     {
         ServiceCollection serviceCollection = new();
         var serviceProvider = ServiceBuilder.CreateDependencyInjection(serviceCollection);
-
-        var application = Application.New("com.shellyorg.shelly", Gio.ApplicationFlags.DefaultFlags);
-
+        
+        var application = Application.New(ShellyConstants.Service, Gio.ApplicationFlags.DefaultFlags);
+        
+        
         application.OnActivate += (sender, _) =>
         {
             //Tray service will need to be update to point at GTK Install
             //or tray service will need to know if avalonia or GTK started it.
-            //TrayStartService.Start();
+            if(serviceProvider!.GetService<IConfigService>()!.LoadConfig().TrayEnabled)
+                TrayStartService.Start();
+            
+            var existingWindow = application.GetActiveWindow();
+            if (existingWindow != null) {
+                existingWindow.Present();
+                return;
+            }
             
             var cssProvider = CssProvider.New();
             cssProvider.LoadFromString(ResourceHelper.LoadAsset("Assets/style.css"));
             StyleContext.AddProviderForDisplay(Gdk.Display.GetDefault()!, cssProvider, 800);
 
+            var iconTheme = IconTheme.GetForDisplay(Gdk.Display.GetDefault()!);
+            iconTheme.AddSearchPath("Assets/svg");
+            
             var mainBuilder = Builder.NewFromString(ResourceHelper.LoadUiFile("UiFiles/MainWindow.ui"), -1);
             var window = (ApplicationWindow)mainBuilder.GetObject("MainWindow")!;
 
@@ -145,6 +155,15 @@ sealed class Program
                 });
             };
 
+            genericQuestionService.PackageBuildRequested += (s, e) =>
+            {
+                GLib.Functions.IdleAdd(0, () =>
+                {
+                    PackageBuildDialog.ShowPackageBuildDialog(mainOverlay, e);
+                    return false;
+                });
+            };
+
 
             window.Show();
 
@@ -184,6 +203,11 @@ sealed class Program
                 }
 
                 var page = serviceProvider.GetRequiredService<T>();
+                if (page is Settings settings)
+                {
+                    settings.NavigationToHomeRequested += NavigateTo<HomeWindow>;
+                }
+                
                 if (page is MetaSearch metaSearch && query != null)
                 {
                     contentArea.Append(metaSearch.CreateWindow(query));

@@ -44,6 +44,9 @@ public class PackageUpdate(IPrivilegedOperationService privilegedOperationServic
 
         SetupColumns(checkColumn, nameColumn, sizeColumn, versionColumn);
 
+        ColumnViewHelper.AlignColumnHeader(_columnView, 1, Align.End);
+        ColumnViewHelper.AlignColumnHeader(_columnView, 2, Align.End);
+
         _columnView.OnRealize += (_, _) => { _ = LoadDataAsync(); };
         _columnView.OnActivate += (_, _) =>
         {
@@ -257,7 +260,7 @@ public class PackageUpdate(IPrivilegedOperationService privilegedOperationServic
         
         for (uint i = 0; i < _listStore.GetNItems(); i++)
         {
-            if (_listStore.GetObject(i) is not AlpmPackageGObject pkgObj) continue;
+            if (_listStore.GetObject(i) is not AlpmUpdateGObject pkgObj) continue;
             pkgObj.Package = null;
             pkgObj.Dispose();
         }
