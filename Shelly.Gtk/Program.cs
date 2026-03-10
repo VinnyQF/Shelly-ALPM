@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+using System.Runtime;
+using System.Reflection;
 using Gtk;
 using Microsoft.Extensions.DependencyInjection;
 using Shelly.Gtk.Services;
@@ -18,30 +19,32 @@ sealed class Program
 {
     public static int Main(string[] args)
     {
+        GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
         ServiceCollection serviceCollection = new();
         var serviceProvider = ServiceBuilder.CreateDependencyInjection(serviceCollection);
-        
+
         var application = Application.New(ShellyConstants.Service, Gio.ApplicationFlags.DefaultFlags);
-        
-        
+
+
         application.OnActivate += (sender, _) =>
         {
-            if(serviceProvider!.GetService<IConfigService>()!.LoadConfig().TrayEnabled)
+            if (serviceProvider!.GetService<IConfigService>()!.LoadConfig().TrayEnabled)
                 TrayStartService.Start();
-            
+
             var existingWindow = application.GetActiveWindow();
-            if (existingWindow != null) {
+            if (existingWindow != null)
+            {
                 existingWindow.Present();
                 return;
             }
-            
+
             var cssProvider = CssProvider.New();
             cssProvider.LoadFromString(ResourceHelper.LoadAsset("Assets/style.css"));
             StyleContext.AddProviderForDisplay(Gdk.Display.GetDefault()!, cssProvider, 800);
 
             var iconTheme = IconTheme.GetForDisplay(Gdk.Display.GetDefault()!);
             iconTheme.AddSearchPath("Assets/svg");
-            
+
             var mainBuilder = Builder.NewFromString(ResourceHelper.LoadUiFile("UiFiles/MainWindow.ui"), -1);
             var window = (ApplicationWindow)mainBuilder.GetObject("MainWindow")!;
 
@@ -94,7 +97,7 @@ sealed class Program
 
             aurMenuButton.Visible = initialConfig.AurEnabled;
             flatpakMenuButton.Visible = initialConfig.FlatPackEnabled;
-           
+
             //Setting window height
             window.DefaultHeight = double.ConvertToInteger<int>(initialConfig.WindowHeight);
             window.DefaultWidth = double.ConvertToInteger<int>(initialConfig.WindowWidth);
@@ -136,7 +139,7 @@ sealed class Program
             {
                 var query = mainSearchEntry.GetText();
                 if (string.IsNullOrWhiteSpace(query)) return;
-                
+
                 NavigateWithQuery<MetaSearch>(query);
                 mainSearchEntry.SetText(string.Empty);
             };
@@ -146,9 +149,9 @@ sealed class Program
             AddAction("manage-packages", NavigateTo<PackageManagement>);
 
             AddAction("install-aur", NavigateTo<AurInstall>);
-            AddAction("update-aur", NavigateTo<AurUpdate>); 
-            AddAction("remove-aur", NavigateTo<AurRemove>); 
-            
+            AddAction("update-aur", NavigateTo<AurUpdate>);
+            AddAction("remove-aur", NavigateTo<AurRemove>);
+
             AddAction("install-flatpak", NavigateTo<FlatpakInstall>);
             AddAction("update-flatpak", NavigateTo<FlatpakUpdate>);
             AddAction("remove-flatpak", NavigateTo<FlatpakRemove>);
@@ -173,7 +176,7 @@ sealed class Program
                     return false;
                 });
             };
-            
+
             var alpmEventService = serviceProvider.GetRequiredService<IAlpmEventService>();
             alpmEventService.Question += (s, e) =>
             {
@@ -250,6 +253,7 @@ sealed class Program
                     {
                         lockoutProgressBar.Pulse();
                     }
+
                     return false;
                 });
             };
@@ -263,20 +267,19 @@ sealed class Program
 
             void NavigateWithQuery<T>(string? query) where T : IShellyWindow
             {
-                currentPage?.Dispose();
-
                 while (contentArea.GetFirstChild() is { } child)
                 {
                     contentArea.Remove(child);
-                    child.Unparent();
                 }
 
+                currentPage?.Dispose();
+                currentPage = null;
                 var page = serviceProvider.GetRequiredService<T>();
                 if (page is Settings settings)
                 {
                     settings.NavigationToHomeRequested += NavigateTo<HomeWindow>;
                 }
-                
+
                 if (page is MetaSearch metaSearch && query != null)
                 {
                     contentArea.Append(metaSearch.CreateWindow(query));
@@ -285,6 +288,7 @@ sealed class Program
                 {
                     contentArea.Append(page.CreateWindow());
                 }
+
                 currentPage = page;
             }
 
