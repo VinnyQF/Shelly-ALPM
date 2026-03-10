@@ -1,4 +1,5 @@
-﻿using Gtk;
+﻿using System.Reflection;
+using Gtk;
 using Microsoft.Extensions.DependencyInjection;
 using Shelly.Gtk.Services;
 using Shelly.Gtk.Services.TrayServices;
@@ -205,6 +206,26 @@ sealed class Program
 
 
             window.Show();
+
+            if (Assembly.GetExecutingAssembly().GetName().Version != configService.LoadConfig().CurrentVersion)
+            {
+                if (!configService.LoadConfig().NewInstall)
+                {
+                    var notes = new GitHubUpdateService(credentialManager).PullReleaseNotesAsync();
+                    ReleaseNotesDialog.ShowReleaseNotesDialog(mainOverlay, notes.Result);
+                    
+                    var config = configService.LoadConfig();
+                    config.CurrentVersion = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0,0,0);
+                    configService.SaveConfig(config);
+                }
+                else
+                {
+                    var config = configService.LoadConfig();
+                    config.NewInstall = false;
+                    config.CurrentVersion = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0,0,0);
+                    configService.SaveConfig(config);
+                }
+            }
 
             var lockoutService = serviceProvider.GetRequiredService<ILockoutService>();
 
