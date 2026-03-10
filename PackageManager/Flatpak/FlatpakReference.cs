@@ -20,11 +20,16 @@ internal static partial class FlatpakReference
         StringMarshalling = StringMarshalling.Utf8)]
     public static partial IntPtr GetSystemInstallations(IntPtr cancellable, out IntPtr error);
 
+    [LibraryImport(LibName, EntryPoint = "flatpak_installation_new_user",
+        StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr InstallationNewUser(IntPtr cancellable, out IntPtr error);
+    
     [LibraryImport(LibName, EntryPoint = "flatpak_installation_list_installed_refs",
         StringMarshalling = StringMarshalling.Utf8)]
     public static partial IntPtr InstallationListInstalledRefs(IntPtr installation, IntPtr cancellable,
         out IntPtr error);
 
+ 
     #endregion
 
     #region Refs
@@ -101,9 +106,16 @@ internal static partial class FlatpakReference
 
     [LibraryImport(GLibName, EntryPoint = "g_ptr_array_unref")]
     public static partial void GPtrArrayUnref(IntPtr array);
-    
+
     [LibraryImport(GLibName, EntryPoint = "g_error_free")]
     public static partial void GErrorFree(IntPtr error);
+
+    [LibraryImport("gio-2.0", EntryPoint = "g_file_get_path", StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr GFileGetPath(IntPtr file);
+
+    [LibraryImport("gio-2.0", EntryPoint = "g_file_new_for_path", StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr GFileNewForPath(string path);
+
     #endregion
 
     #region Remotes

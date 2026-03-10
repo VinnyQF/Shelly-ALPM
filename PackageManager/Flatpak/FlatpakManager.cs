@@ -24,59 +24,83 @@ public class FlatpakManager : IDisposable
             return packages;
         }
 
+        // Get system installations
         var installationsPtr = FlatpakReference.GetSystemInstallations(IntPtr.Zero, out IntPtr error);
-
-        if (error != IntPtr.Zero || installationsPtr == IntPtr.Zero)
+        if (error == IntPtr.Zero && installationsPtr != IntPtr.Zero)
         {
-            return packages;
+            try
+            {
+                var dataPtr = Marshal.ReadIntPtr(installationsPtr);
+                var length = Marshal.ReadInt32(installationsPtr + IntPtr.Size);
+
+                for (var i = 0; i < length; i++)
+                {
+                    var installationPtr = Marshal.ReadIntPtr(dataPtr + i * IntPtr.Size);
+                    if (installationPtr != IntPtr.Zero)
+                    {
+                        AddPackagesFromInstallation(installationPtr, packages);
+                    }
+                }
+            }
+            finally
+            {
+                FlatpakReference.GPtrArrayUnref(installationsPtr);
+            }
+        }
+
+        // Get user installation
+        var userInstallationPtr = FlatpakReference.InstallationNewUser(IntPtr.Zero, out IntPtr userError);
+        if (userError != IntPtr.Zero)
+        {
+            FlatpakReference.GErrorFree(userError);
+        }
+        else if (userInstallationPtr != IntPtr.Zero)
+        {
+            try
+            {
+                AddPackagesFromInstallation(userInstallationPtr, packages);
+            }
+            finally
+            {
+                FlatpakReference.GObjectUnref(userInstallationPtr);
+            }
+        }
+
+        return packages;
+    }
+
+    /// <summary>
+    /// Helper method to add packages from an installation to the list
+    /// </summary>
+    private void AddPackagesFromInstallation(IntPtr installationPtr, List<FlatpakPackageDto> packages)
+    {
+        var refsPtr = FlatpakReference.InstallationListInstalledRefs(
+            installationPtr, IntPtr.Zero, out IntPtr refsError);
+
+        if (refsError != IntPtr.Zero || refsPtr == IntPtr.Zero)
+        {
+            FlatpakReference.GErrorFree(refsError);
+            return;
         }
 
         try
         {
-            var dataPtr = Marshal.ReadIntPtr(installationsPtr);
-            var length = Marshal.ReadInt32(installationsPtr + IntPtr.Size);
+            var refsDataPtr = Marshal.ReadIntPtr(refsPtr);
+            var refsLength = Marshal.ReadInt32(refsPtr + IntPtr.Size);
 
-            for (var i = 0; i < length; i++)
+            for (var j = 0; j < refsLength; j++)
             {
-                var installationPtr = Marshal.ReadIntPtr(dataPtr + i * IntPtr.Size);
-                if (installationPtr == IntPtr.Zero) continue;
+                var refPtr = Marshal.ReadIntPtr(refsDataPtr + j * IntPtr.Size);
+                if (refPtr == IntPtr.Zero) continue;
 
-                var refsPtr = FlatpakReference.InstallationListInstalledRefs(
-                    installationPtr, IntPtr.Zero, out IntPtr refsError);
-
-                if (refsError != IntPtr.Zero || refsPtr == IntPtr.Zero)
-                {
-                    FlatpakReference.GErrorFree(refsError);
-                    FlatpakReference.GObjectUnref(installationPtr);
-                    continue;
-                }
-
-                try
-                {
-                    var refsDataPtr = Marshal.ReadIntPtr(refsPtr);
-                    var refsLength = Marshal.ReadInt32(refsPtr + IntPtr.Size);
-
-                    for (var j = 0; j < refsLength; j++)
-                    {
-                        var refPtr = Marshal.ReadIntPtr(refsDataPtr + j * IntPtr.Size);
-                        if (refPtr == IntPtr.Zero) continue;
-
-                        var package = new FlatpackPackage(refPtr);
-                        packages.Add(package.ToDto());
-                    }
-                }
-                finally
-                {
-                    FlatpakReference.GPtrArrayUnref(refsPtr);
-                }
+                var package = new FlatpackPackage(refPtr);
+                packages.Add(package.ToDto());
             }
         }
         finally
         {
-            FlatpakReference.GPtrArrayUnref(installationsPtr);
+            FlatpakReference.GPtrArrayUnref(refsPtr);
         }
-
-        return packages;
     }
 
     /// <summary>
