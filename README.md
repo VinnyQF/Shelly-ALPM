@@ -3,9 +3,11 @@
 ![Shelly Wiki](https://img.shields.io/badge/Shelly-Wiki-blue)
 
 <p align="center">
-  <img src="demo_part1.gif" width="32%">
-  <img src="demo_part2.gif" width="32%">
-  <img src="demo_part3.gif" width="32%">
+  Search Standard Packages, AUR, and Flatpak in one place
+  
+ <img width="1372" height="1019" alt="image" src="https://github.com/user-attachments/assets/6aa86662-d9f6-4d3c-9164-9df5d05257b3" />
+  <img width="1768" height="1177" alt="image" src="https://github.com/user-attachments/assets/8e9d851b-a3a0-4aaf-b91a-b3b3c3ec7f6d" />
+  <img width="1768" height="1177" alt="image" src="https://github.com/user-attachments/assets/cc2a8d31-e5c9-42d4-ba87-db25e10a1110" />
 </p>
 
 ### About
@@ -38,10 +40,6 @@ or
 ```bash
 paru -S shelly
 ```
-
-**Note:** -bin packages will be made available soon and will allow you to install without needing to run makepkg every
-update.
-
 ## Uninstall
 
 To uninstall the quick installer version is you wish to switch to the AUR managed version:
@@ -54,8 +52,7 @@ curl -fsSL https://raw.githubusercontent.com/ZoeyErinBauer/Shelly-ALPM/master/un
 
 - **Modern-CLI**: Provides a command-line interface for advanced users and automation, with a focus on ease of use.
 - **Native Arch Integration**: Directly interacts with `libalpm` for accurate and fast package management.
-- **Modern UI Framework**: Built using [Avalonia UI](https://avaloniaui.net/), ensuring a modern and responsive
-  user interface.
+- **Native Wayland Support**: Front end built using GTK4.
 - **Package Management**: Supports searching for, installing, updating, and removing packages.
 - **Repository Management**: Synchronizes with official repositories to keep package lists up to date.
 - **AUR Support**: Integration with the Arch User Repository for a wider range of software.
@@ -67,8 +64,6 @@ Upcoming features and development targets:
 
 - **Repository Modification**: Allow modification of supported repositories (In progress).
 - **Package Grouping**: Group related packages for easier management. (In progress)
-- **Desktop Integration**: Enhance integration with the desktop environment for seamless experience. Targeting KDE
-  Plasma and Gnome initially. (In progress)
 - **Shelly Sync**: Multi-system sync lists that keep packages together across computers (In progress)
 
 ## Prerequisites
@@ -77,7 +72,6 @@ Upcoming features and development targets:
 - **.NET 10.0 Runtime** (for running only if installed from non *-bin aur package)
 - **.NET 10.0 SDK** (for building)
 - **libalpm** (provided by `pacman`)
-- **xwayland**
 
 ## Installation
 

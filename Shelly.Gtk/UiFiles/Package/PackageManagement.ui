@@ -6,6 +6,9 @@
     <child>
       <object class="GtkBox">
      <property name="halign">baseline</property>
+     <property name="margin-top">10</property>
+     <property name="margin-start">10</property>
+     <property name="margin-end">10</property>
      <property name="margin-bottom">10</property>
      <property name="spacing">5</property>
       <child>
@@ -20,6 +23,19 @@
       <child>
         <object class="GtkBox">
           <property name="hexpand">true</property>
+        </object>
+      </child>
+      <child>
+        <object class="GtkCheckButton" id="cascade_delete_check">
+          <property name="active">true</property>
+          <property name="label">Cascade Delete</property>
+          <property name="valign">center</property>
+        </object>
+      </child>
+      <child>
+        <object class="GtkCheckButton" id="remove_configs_check">
+          <property name="label">Remove Configs</property>
+          <property name="valign">center</property>
         </object>
       </child>
       <child>

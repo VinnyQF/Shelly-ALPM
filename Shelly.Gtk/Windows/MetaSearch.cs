@@ -1,9 +1,11 @@
+using System.Security.Cryptography;
 using Gtk;
 using Shelly.Gtk.Helpers;
 using Shelly.Gtk.Services;
 using Shelly.Gtk.UiModels;
 using Shelly.Gtk.UiModels.PackageManagerObjects.GObjects;
 using Shelly.Gtk.Windows.Dialog;
+// ReSharper disable CollectionNeverQueried.Local
 
 namespace Shelly.Gtk.Windows;
 
@@ -11,6 +13,7 @@ public class MetaSearch(
     IPrivilegedOperationService privilegedOperationService,
     IUnprivilegedOperationService unprivilegedOperationService,
     IConfigService configService,
+    IGenericQuestionService genericQuestionService,
     ILockoutService lockoutService) : IShellyWindow
 {
     private Box _box = null!;
@@ -24,8 +27,16 @@ public class MetaSearch(
     private SignalListItemFactory _nameFactory = null!;
     private SignalListItemFactory _repoFactory = null!;
     private SignalListItemFactory _versionFactory = null!;
+    private SignalListItemFactory _descriptionFactory = null!;
 
-    private Dictionary<ListItem, EventHandler> _checkBinding = [];
+    private ColumnViewColumn _checkColumn = null!;
+    private ColumnViewColumn _nameColumn = null!;
+    private ColumnViewColumn _repoColumn = null!;
+    private ColumnViewColumn _versionColumn = null!;
+    private ColumnViewColumn _descriptionColumn = null!;
+
+    private Dictionary<ColumnViewCell, EventHandler> _checkBinding = [];
+    private readonly List<MetaPackageGObject> _packageGObjectRefs = [];
 
     public Widget CreateWindow() => CreateWindow(null);
 
@@ -33,26 +44,27 @@ public class MetaSearch(
     {
         _initialQuery = initialQuery;
         var builder = Builder.NewFromString(ResourceHelper.LoadUiFile("UiFiles/MetaSearchWindow.ui"), -1);
-       
+
         _box = (Box)builder.GetObject("MetaSearchWindow")!;
         _columnView = (ColumnView)builder.GetObject("package_grid")!;
         _installButton = (Button)builder.GetObject("install_button")!;
 
-        var checkColumn = (ColumnViewColumn)builder.GetObject("check_column")!;
-        var nameColumn = (ColumnViewColumn)builder.GetObject("name_column")!;
-        var repoColumn = (ColumnViewColumn)builder.GetObject("repo_column")!;
-        var versionColumn = (ColumnViewColumn)builder.GetObject("version_column")!;
+        _checkColumn = (ColumnViewColumn)builder.GetObject("check_column")!;
+        _nameColumn = (ColumnViewColumn)builder.GetObject("name_column")!;
+        _repoColumn = (ColumnViewColumn)builder.GetObject("repo_column")!;
+        _versionColumn = (ColumnViewColumn)builder.GetObject("version_column")!;
+        _descriptionColumn = (ColumnViewColumn)builder.GetObject("description_column")!;
 
         _listStore = Gio.ListStore.New(MetaPackageGObject.GetGType());
         _selectionModel = SingleSelection.New(_listStore);
         _selectionModel.CanUnselect = true;
         _columnView.SetModel(_selectionModel);
 
-        SetupColumns(checkColumn, nameColumn, repoColumn, versionColumn);
+        SetupColumns(_checkColumn, _nameColumn, _repoColumn, _versionColumn, _descriptionColumn);
 
-        ColumnViewHelper.AlignColumnHeader(_columnView, 1, Align.End);
         ColumnViewHelper.AlignColumnHeader(_columnView, 2, Align.End);
-        
+        ColumnViewHelper.AlignColumnHeader(_columnView, 3, Align.End);
+
         _installButton.OnClicked += (_, _) => { _ = InstallSelectedAsync(); };
 
         if (!string.IsNullOrEmpty(_initialQuery))
@@ -72,12 +84,12 @@ public class MetaSearch(
     }
 
     private void SetupColumns(ColumnViewColumn checkColumn, ColumnViewColumn nameColumn, ColumnViewColumn repoColumn,
-        ColumnViewColumn versionColumn)
+        ColumnViewColumn versionColumn, ColumnViewColumn descriptionColumn)
     {
         _checkFactory = SignalListItemFactory.New();
         _checkFactory.OnSetup += (_, args) =>
         {
-            var listItem = (ListItem)args.Object;
+            if (args.Object is not ColumnViewCell listItem) return;
             var check = new CheckButton { MarginStart = 10, MarginEnd = 10 };
             listItem.SetChild(check);
             check.OnToggled += (s, _) =>
@@ -88,7 +100,7 @@ public class MetaSearch(
         };
         _checkFactory.OnBind += (_, args) =>
         {
-            var listItem = (ListItem)args.Object;
+            if (args.Object is not ColumnViewCell listItem) return;
             if (listItem.GetItem() is not MetaPackageGObject pkgObj ||
                 listItem.GetChild() is not CheckButton check) return;
             check.SetActive(pkgObj.IsSelected);
@@ -103,7 +115,7 @@ public class MetaSearch(
         };
         _checkFactory.OnUnbind += (_, args) =>
         {
-            var listItem = (ListItem)args.Object;
+            if (args.Object is not ColumnViewCell listItem) return;
             if (listItem.GetItem() is not MetaPackageGObject pkgObj) return;
             if (_checkBinding.Remove(listItem, out var handler)) pkgObj.OnSelectionToggled -= handler;
         };
@@ -111,10 +123,13 @@ public class MetaSearch(
 
         _nameFactory = SignalListItemFactory.New();
         _nameFactory.OnSetup += (_, args) =>
-            ((ListItem)args.Object).SetChild(new Label { Halign = Align.Start, MarginStart = 6 });
+        {
+            if (args.Object is not ColumnViewCell listItem) return;
+            listItem.SetChild(new Label { Halign = Align.Start, MarginStart = 6 });
+        };
         _nameFactory.OnBind += (_, args) =>
         {
-            var listItem = (ListItem)args.Object;
+            if (args.Object is not ColumnViewCell listItem) return;
             if (listItem.GetItem() is MetaPackageGObject { Package: { } pkg } && listItem.GetChild() is Label label)
                 label.SetText(pkg.Name);
         };
@@ -122,10 +137,13 @@ public class MetaSearch(
 
         _repoFactory = SignalListItemFactory.New();
         _repoFactory.OnSetup += (_, args) =>
-            ((ListItem)args.Object).SetChild(new Label { Halign = Align.Start, MarginStart = 6 });
+        {
+            if (args.Object is not ColumnViewCell listItem) return;
+            listItem.SetChild(new Label { Halign = Align.End, MarginStart = 6 });
+        };
         _repoFactory.OnBind += (_, args) =>
         {
-            var listItem = (ListItem)args.Object;
+            if (args.Object is not ColumnViewCell listItem) return;
             if (listItem.GetItem() is MetaPackageGObject { Package: { } pkg } && listItem.GetChild() is Label label)
                 label.SetText(pkg.Repository);
         };
@@ -133,14 +151,31 @@ public class MetaSearch(
 
         _versionFactory = SignalListItemFactory.New();
         _versionFactory.OnSetup += (_, args) =>
-            ((ListItem)args.Object).SetChild(new Label { Halign = Align.Start, MarginStart = 6 });
+        {
+            if (args.Object is not ColumnViewCell listItem) return;
+            listItem.SetChild(new Label { Halign = Align.End, MarginStart = 6 });
+        };
         _versionFactory.OnBind += (_, args) =>
         {
-            var listItem = (ListItem)args.Object;
+            if (args.Object is not ColumnViewCell listItem) return;
             if (listItem.GetItem() is MetaPackageGObject { Package: { } pkg } && listItem.GetChild() is Label label)
                 label.SetText(pkg.Version);
         };
         versionColumn.SetFactory(_versionFactory);
+
+        _descriptionFactory = SignalListItemFactory.New();
+        _descriptionFactory.OnSetup += (_, args) =>
+        {
+            if (args.Object is not ColumnViewCell listItem) return;
+            listItem.SetChild(new Label { Halign = Align.Start, MarginStart = 6 });
+        };
+        _descriptionFactory.OnBind += (_, args) =>
+        {
+            if (args.Object is not ColumnViewCell listItem) return;
+            if (listItem.GetItem() is MetaPackageGObject { Package: { } pkg } && listItem.GetChild() is Label label)
+                label.SetText(pkg.Description.Substring(0, pkg.Description.Length > 100 ? 100 : pkg.Description.Length));
+        };
+        descriptionColumn.SetFactory(_descriptionFactory);
     }
 
     private async Task LoadDataAsync()
@@ -181,7 +216,7 @@ public class MetaSearch(
                         x.Result.Select(y => new MetaPackageModel(y.Id, y.Name, y.Version, y.Description,
                             PackageType.FLATPAK, y.Description, y.Id,
                             flatPakInstalled.Any(z => z.Name == y.Name))).ToList());
-                
+
                 return flatpakAvailable;
             });
             groupList.Add(flatpakGroup);
@@ -214,14 +249,18 @@ public class MetaSearch(
                 models.AddRange(metaEnumerable.ToList());
             }
         }
-        
+
         GLib.Functions.IdleAdd(0, () =>
         {
             _listStore.RemoveAll();
+            _packageGObjectRefs.Clear();
             foreach (var model in models)
             {
-                _listStore.Append(new MetaPackageGObject { Package = model });
+                var pkgObj = new MetaPackageGObject { Package = model };
+                _packageGObjectRefs.Add(pkgObj);
+                _listStore.Append(pkgObj);
             }
+
             return false;
         });
     }
@@ -265,48 +304,18 @@ public class MetaSearch(
         finally
         {
             lockoutService.Hide();
+                
+            var args = new ToastMessageEventArgs(
+                $"Updated {selected.Count} Package(s)"
+            );
+            genericQuestionService.RaiseToastMessage(args);
         }
     }
 
     public void Dispose()
     {
-        // Disconnect the model from the view to break circular refs
-        _columnView.SetModel(null);
-
-        // Dispose all GObject items BEFORE removing them
-        for (uint i = 0; i < _listStore.GetNItems(); i++)
-        {
-            if (_listStore.GetObject(i) is MetaPackageGObject pkgObj)
-            {
-                pkgObj.Package = null;
-                pkgObj.Dispose();
-            }
-        }
-
         _listStore.RemoveAll();
-
-        _selectionModel.Dispose();
-        _listStore.Dispose();
-
-        _checkFactory.Dispose();
-        _nameFactory.Dispose();
-        _repoFactory.Dispose();
-        _versionFactory.Dispose();
-
+        _packageGObjectRefs.Clear();
         _checkBinding.Clear();
-
-        _columnView = null!;
-        _box = null!;
-        _selectionModel = null!;
-        _listStore = null!;
-        _installButton = null!;
-        _checkFactory = null!;
-        _nameFactory = null!;
-        _repoFactory = null!;
-        _versionFactory = null!;
-
-        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
-        GC.WaitForPendingFinalizers();
-        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
     }
 }
