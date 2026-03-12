@@ -325,6 +325,14 @@ public class Program
                 flatpak.AddCommand<FlatpakUpgrade>("upgrade")
                     .WithDescription("Upgrade all flatpak apps")
                     .WithExample("flatpak", "upgrade");
+
+                flatpak.AddCommand<FlatpakListRemotes>("list-remotes");
+                
+                flatpak.AddCommand<FlatpakAddRemote>("add-remotes");
+                
+                flatpak.AddCommand<FlatpakRemoveRemote>("remove-remotes");
+                
+                flatpak.AddCommand<GetFromRemote>("get-from-remote").WithDescription("Get package(s) from remote");
             });
 
             config.AddBranch("utility", utility =>

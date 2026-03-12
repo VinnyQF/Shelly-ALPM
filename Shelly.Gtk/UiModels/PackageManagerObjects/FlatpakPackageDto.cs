@@ -34,6 +34,9 @@ public record FlatpakPackageDto
 
     [JsonPropertyName("description")]
     public string Description { get; set; } = string.Empty;
+    
+    [JsonPropertyName("remote")]
+    public string remote { get; set; } = string.Empty;
 
     [JsonPropertyName("releases")]
     public List<AppstreamRelease> Releases { get; set; } = [];

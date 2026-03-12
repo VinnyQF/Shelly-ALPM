@@ -281,34 +281,52 @@ public class FlatpakManager : IDisposable
     /// </summary>
     /// <param name="appId">The application ID (e.g., "org.mozilla.firefox")</param>
     /// <param name="remoteName">The remote name (e.g., "flathub"). If null, will try the first available remote.</param>
+    /// <param name="isUser">Whether to install to user installation (true) or system installation (false)</param>
     /// <returns>A result message indicating success or failure</returns>
-    public string InstallApp(string appId, string? remoteName = null)
+    public string InstallApp(string appId, string? remoteName = null, bool isUser = false)
     {
-        var installationsPtr = FlatpakReference.GetSystemInstallations(IntPtr.Zero, out IntPtr error);
+        IntPtr installationPtr;
+        IntPtr installationsPtr = IntPtr.Zero;
 
-        if (error != IntPtr.Zero || installationsPtr == IntPtr.Zero)
+        if (isUser)
         {
-            FlatpakReference.GErrorFree(error);
-            FlatpakReference.GPtrArrayUnref(installationsPtr);
-            return "Failed to get system installations.";
+            installationPtr = FlatpakReference.InstallationNewUser(IntPtr.Zero, out IntPtr userError);
+            if (userError != IntPtr.Zero || installationPtr == IntPtr.Zero)
+            {
+                FlatpakReference.GErrorFree(userError);
+                return "Failed to get user installation.";
+            }
         }
-
-        try
+        else
         {
+            installationsPtr = FlatpakReference.GetSystemInstallations(IntPtr.Zero, out IntPtr error);
+
+            if (error != IntPtr.Zero || installationsPtr == IntPtr.Zero)
+            {
+                FlatpakReference.GErrorFree(error);
+                FlatpakReference.GPtrArrayUnref(installationsPtr);
+                return "Failed to get system installations.";
+            }
+
             var dataPtr = Marshal.ReadIntPtr(installationsPtr);
             int length = Marshal.ReadInt32(installationsPtr + IntPtr.Size);
 
             if (length == 0)
             {
+                FlatpakReference.GPtrArrayUnref(installationsPtr);
                 return "No flatpak installations found.";
             }
 
-            var installationPtr = Marshal.ReadIntPtr(dataPtr);
+            installationPtr = Marshal.ReadIntPtr(dataPtr);
             if (installationPtr == IntPtr.Zero)
             {
+                FlatpakReference.GPtrArrayUnref(installationsPtr);
                 return "Installation pointer is invalid.";
             }
+        }
 
+        try
+        {
             var remote = remoteName ?? GetFirstRemote(installationPtr);
             if (string.IsNullOrEmpty(remote))
             {
@@ -338,7 +356,9 @@ public class FlatpakManager : IDisposable
 
                 if (!addSuccess || addError != IntPtr.Zero)
                 {
-                    return $"Failed to add {appId} to installation queue. Check if the app ID is correct.";
+                    var errorMsg = FlatpakReference.GetErrorMessage(addError);
+                    FlatpakReference.GErrorFree(addError);
+                    return $"Failed to add {appId} to installation queue: {errorMsg}";
                 }
 
                 var runSuccess = FlatpakReference.TransactionRun(
@@ -346,10 +366,13 @@ public class FlatpakManager : IDisposable
 
                 if (!runSuccess || runError != IntPtr.Zero)
                 {
-                    return $"Installation of {appId} failed. You may need elevated permissions.";
+                    var errorMsg = FlatpakReference.GetErrorMessage(runError);
+                    FlatpakReference.GErrorFree(runError);
+                    return $"Installation of {appId} failed: {errorMsg}";
                 }
 
-                return $"Successfully installed {appId} from {remote}.";
+                var scope = isUser ? "user" : "system";
+                return $"Successfully installed {appId} from {remote} to {scope}.";
             }
             finally
             {
@@ -358,7 +381,14 @@ public class FlatpakManager : IDisposable
         }
         finally
         {
-            FlatpakReference.GPtrArrayUnref(installationsPtr);
+            if (isUser)
+            {
+                FlatpakReference.GObjectUnref(installationPtr);
+            }
+            else if (installationsPtr != IntPtr.Zero)
+            {
+                FlatpakReference.GPtrArrayUnref(installationsPtr);
+            }
         }
     }
 
@@ -399,6 +429,230 @@ public class FlatpakManager : IDisposable
         return null;
     }
 
+    public string UninstallApp(string nameOrId, bool removeUnused = false)
+    {
+        // Try system installations first
+        var installationsPtr = FlatpakReference.GetSystemInstallations(IntPtr.Zero, out IntPtr error);
+        if (error == IntPtr.Zero && installationsPtr != IntPtr.Zero)
+        {
+            try
+            {
+                var dataPtr = Marshal.ReadIntPtr(installationsPtr);
+                var length = Marshal.ReadInt32(installationsPtr + IntPtr.Size);
+
+                for (var i = 0; i < length; i++)
+                {
+                    var installationPtr = Marshal.ReadIntPtr(dataPtr + i * IntPtr.Size);
+                    if (installationPtr == IntPtr.Zero) continue;
+
+                    var match = FindInstalledApp(installationPtr, nameOrId);
+                    if (match != null)
+                    {
+                        return UninstallFromInstallation(installationPtr, match, nameOrId, removeUnused, false);
+                    }
+                }
+            }
+            finally
+            {
+                FlatpakReference.GPtrArrayUnref(installationsPtr);
+            }
+        }
+        else if (error != IntPtr.Zero)
+        {
+            FlatpakReference.GErrorFree(error);
+        }
+
+        // Try user installation
+        var userInstallationPtr = FlatpakReference.InstallationNewUser(IntPtr.Zero, out IntPtr userError);
+        if (userError != IntPtr.Zero)
+        {
+            FlatpakReference.GErrorFree(userError);
+            return $"Could not find installed app matching '{nameOrId}'.";
+        }
+
+        if (userInstallationPtr == IntPtr.Zero)
+        {
+            return $"Could not find installed app matching '{nameOrId}'.";
+        }
+
+        try
+        {
+            var match = FindInstalledApp(userInstallationPtr, nameOrId);
+            if (match == null)
+            {
+                return $"Could not find installed app matching '{nameOrId}'.";
+            }
+
+            return UninstallFromInstallation(userInstallationPtr, match, nameOrId, removeUnused, true);
+        }
+        finally
+        {
+            FlatpakReference.GObjectUnref(userInstallationPtr);
+        }
+    }
+
+    private string UninstallFromInstallation(IntPtr installationPtr, FlatpakPackageDto match,
+        string nameOrId, bool removeUnused, bool isUser)
+    {
+        var kindString = match.Kind == FlatpakReference.FlatpakRefKindApp ? "app" : "runtime";
+        var refString = $"{kindString}/{match.Id}/{match.Arch}/{match.Branch}";
+
+        var transactionPtr = FlatpakReference.TransactionNewForInstallation(
+            installationPtr, IntPtr.Zero, out IntPtr transactionError);
+
+        if (transactionError != IntPtr.Zero || transactionPtr == IntPtr.Zero)
+        {
+            return "Failed to create uninstallation transaction.";
+        }
+
+        try
+        {
+            var newOpCallback = new FlatpakReference.TransactionNewOperationCallback(OnNewOperation);
+            var newOpCallbackPtr = Marshal.GetFunctionPointerForDelegate(newOpCallback);
+            FlatpakReference.GSignalConnectData(transactionPtr, "new-operation", newOpCallbackPtr,
+                IntPtr.Zero, IntPtr.Zero, 0);
+
+            var addSuccess = FlatpakReference.TransactionAddUninstall(
+                transactionPtr, refString, out IntPtr addError);
+
+            if (!addSuccess || addError != IntPtr.Zero)
+            {
+                var errorMsg = FlatpakReference.GetErrorMessage(addError);
+                FlatpakReference.GErrorFree(addError);
+                return $"Failed to add {nameOrId} to uninstallation queue: {errorMsg}";
+            }
+
+            var runSuccess = FlatpakReference.TransactionRun(
+                transactionPtr, IntPtr.Zero, out IntPtr runError);
+
+            if (!runSuccess || runError != IntPtr.Zero)
+            {
+                var errorMsg = FlatpakReference.GetErrorMessage(runError);
+                FlatpakReference.GErrorFree(runError);
+                return $"Uninstallation of {nameOrId} failed: {errorMsg}";
+            }
+
+            var scope = isUser ? "user" : "system";
+            var result = $"Successfully uninstalled {match.Name} ({match.Id}) from {scope}.";
+
+            // Remove unused dependencies if requested
+            if (removeUnused)
+            {
+                result += RemoveUnusedDependencies(installationPtr);
+            }
+
+            return result;
+        }
+        finally
+        {
+            FlatpakReference.GObjectUnref(transactionPtr);
+        }
+    }
+
+    private string RemoveUnusedDependencies(IntPtr installationPtr)
+    {
+        var unusedRefsPtr = FlatpakReference.InstallationListUnusedRefs(
+            installationPtr, null, IntPtr.Zero, out IntPtr error);
+
+        if (error != IntPtr.Zero || unusedRefsPtr == IntPtr.Zero)
+        {
+            if (error != IntPtr.Zero)
+            {
+                FlatpakReference.GErrorFree(error);
+            }
+            return " No unused dependencies found.";
+        }
+
+        try
+        {
+            var dataPtr = Marshal.ReadIntPtr(unusedRefsPtr);
+            var length = Marshal.ReadInt32(unusedRefsPtr + IntPtr.Size);
+
+            if (length == 0)
+            {
+                return " No unused dependencies found.";
+            }
+
+        var transactionPtr = FlatpakReference.TransactionNewForInstallation(
+            installationPtr, IntPtr.Zero, out IntPtr transactionError);
+
+            if (transactionError != IntPtr.Zero || transactionPtr == IntPtr.Zero)
+            {
+                if (transactionError != IntPtr.Zero)
+                {
+                    FlatpakReference.GErrorFree(transactionError);
+                }
+                return " Failed to create transaction for removing unused dependencies.";
+            }
+
+            try
+            {
+                var removedCount = 0;
+                for (var i = 0; i < length; i++)
+                {
+                    var refPtr = Marshal.ReadIntPtr(dataPtr + i * IntPtr.Size);
+                    if (refPtr == IntPtr.Zero) continue;
+
+                    // Build the ref string: kind/name/arch/branch
+                    var namePtr = FlatpakReference.RefGetName(refPtr);
+                    var archPtr = FlatpakReference.RefGetArch(refPtr);
+                    var branchPtr = FlatpakReference.RefGetBranch(refPtr);
+                    var kind = FlatpakReference.RefGetKind(refPtr);
+
+                    var name = Marshal.PtrToStringUTF8(namePtr);
+                    var arch = Marshal.PtrToStringUTF8(archPtr);
+                    var branch = Marshal.PtrToStringUTF8(branchPtr);
+
+                    if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(arch) || string.IsNullOrEmpty(branch))
+                        continue;
+
+                    var kindString = kind == FlatpakReference.FlatpakRefKindApp ? "app" : "runtime";
+                    var refString = $"{kindString}/{name}/{arch}/{branch}";
+
+                    var addSuccess = FlatpakReference.TransactionAddUninstall(
+                        transactionPtr, refString, out IntPtr addError);
+
+                    if (addSuccess && addError == IntPtr.Zero)
+                    {
+                        removedCount++;
+                    }
+                    else if (addError != IntPtr.Zero)
+                    {
+                        FlatpakReference.GErrorFree(addError);
+                    }
+                }
+
+                if (removedCount > 0)
+                {
+                    var runSuccess = FlatpakReference.TransactionRun(
+                        transactionPtr, IntPtr.Zero, out IntPtr runError);
+
+                    if (!runSuccess || runError != IntPtr.Zero)
+                    {
+                        if (runError != IntPtr.Zero)
+                        {
+                            FlatpakReference.GErrorFree(runError);
+                        }
+                        return $" Failed to remove {removedCount} unused dependencies.";
+                    }
+
+                    return $" Removed {removedCount} unused dependencies.";
+                }
+
+                return " No unused dependencies to remove.";
+            }
+            finally
+            {
+                FlatpakReference.GObjectUnref(transactionPtr);
+            }
+        }
+        finally
+        {
+            FlatpakReference.GPtrArrayUnref(unusedRefsPtr);
+        }
+    }
+
+    /*
     /// <summary>
     /// Uninstalls a flatpak application by its app ID or friendly name.
     /// </summary>
@@ -477,6 +731,7 @@ public class FlatpakManager : IDisposable
 
         return $"Could not find installed app matching '{nameOrId}'.";
     }
+    */
 
     /// <summary>
     /// Updates a flatpak application by its app ID or friendly name.
@@ -603,12 +858,12 @@ public class FlatpakManager : IDisposable
                     $"Failed to add {packageDto.Id} to update queue. Error: {response} App may already be up to date.";
             }
 
-            
+
             var newOpCallback = new FlatpakReference.TransactionNewOperationCallback(OnNewOperation);
             var newOpCallbackPtr = Marshal.GetFunctionPointerForDelegate(newOpCallback);
             FlatpakReference.GSignalConnectData(transactionPtr, "new-operation", newOpCallbackPtr,
                 IntPtr.Zero, IntPtr.Zero, 0);
-            
+
             var runSuccess = FlatpakReference.TransactionRun(
                 transactionPtr, IntPtr.Zero, out IntPtr runError);
 
@@ -638,7 +893,6 @@ public class FlatpakManager : IDisposable
             return remotes;
         }
 
-        // Get system installation remotes
         var installationsPtr = FlatpakReference.GetSystemInstallations(IntPtr.Zero, out IntPtr error);
         if (error == IntPtr.Zero && installationsPtr != IntPtr.Zero)
         {
@@ -662,7 +916,6 @@ public class FlatpakManager : IDisposable
             }
         }
 
-        // Get user installation remotes
         var userInstallationPtr = FlatpakReference.InstallationNewUser(IntPtr.Zero, out IntPtr userError);
         if (userError != IntPtr.Zero)
         {
@@ -682,6 +935,59 @@ public class FlatpakManager : IDisposable
 
         return remotes;
     }
+
+    public List<FlatpakRemoteDto> ListRemotesWithDetails()
+    {
+        var remotesDto = new List<FlatpakRemoteDto>();
+
+        if (!NativeResolver.IsLibraryAvailable(FlatpakReference.LibName))
+        {
+            return [];
+        }
+
+        var installationsPtr = FlatpakReference.GetSystemInstallations(IntPtr.Zero, out IntPtr error);
+        if (error == IntPtr.Zero && installationsPtr != IntPtr.Zero)
+        {
+            try
+            {
+                var dataPtr = Marshal.ReadIntPtr(installationsPtr);
+                var length = Marshal.ReadInt32(installationsPtr + IntPtr.Size);
+
+                for (var i = 0; i < length; i++)
+                {
+                    var installationPtr = Marshal.ReadIntPtr(dataPtr + i * IntPtr.Size);
+                    if (installationPtr != IntPtr.Zero)
+                    {
+                        AddRemotesFromInstallation(installationPtr, remotesDto, "system");
+                    }
+                }
+            }
+            finally
+            {
+                FlatpakReference.GPtrArrayUnref(installationsPtr);
+            }
+        }
+
+        var userInstallationPtr = FlatpakReference.InstallationNewUser(IntPtr.Zero, out IntPtr userError);
+        if (userError != IntPtr.Zero)
+        {
+            FlatpakReference.GErrorFree(userError);
+        }
+        else if (userInstallationPtr != IntPtr.Zero)
+        {
+            try
+            {
+                AddRemotesFromInstallation(userInstallationPtr, remotesDto, "u");
+            }
+            finally
+            {
+                FlatpakReference.GObjectUnref(userInstallationPtr);
+            }
+        }
+
+        return remotesDto;
+    }
+
 
     /// <summary>
     /// Helper method to add remotes from an installation to the list
@@ -722,6 +1028,44 @@ public class FlatpakManager : IDisposable
     }
 
     /// <summary>
+    /// Helper method to add remotes from an installation to the list
+    /// </summary>
+    private void AddRemotesFromInstallation(IntPtr installationPtr, List<FlatpakRemoteDto> remotes, string type)
+    {
+        var remotesPtr = FlatpakReference.InstallationListRemotes(
+            installationPtr, IntPtr.Zero, out IntPtr error);
+
+        if (error != IntPtr.Zero || remotesPtr == IntPtr.Zero)
+        {
+            FlatpakReference.GErrorFree(error);
+            return;
+        }
+
+        try
+        {
+            var remotesDataPtr = Marshal.ReadIntPtr(remotesPtr);
+            var remotesLength = Marshal.ReadInt32(remotesPtr + IntPtr.Size);
+
+            for (var i = 0; i < remotesLength; i++)
+            {
+                var remotePtr = Marshal.ReadIntPtr(remotesDataPtr + i * IntPtr.Size);
+                if (remotePtr == IntPtr.Zero) continue;
+                var remoteName = PtrToStringSafe(FlatpakReference.RemoteGetName(remotePtr));
+
+                remotes.Add(new FlatpakRemoteDto
+                {
+                    Name = remoteName,
+                    Scope = type
+                });
+            }
+        }
+        finally
+        {
+            FlatpakReference.GPtrArrayUnref(remotesPtr);
+        }
+    }
+
+    /// <summary>
     /// Adds a remote repository to an installation.
     /// </summary>
     /// <param name="remoteName">The name for the remote (e.g., "flathub")</param>
@@ -749,6 +1093,7 @@ public class FlatpakManager : IDisposable
                 {
                     FlatpakReference.GPtrArrayUnref(installationsPtr);
                 }
+
                 return "Failed to get system installation.";
             }
 
@@ -845,6 +1190,7 @@ public class FlatpakManager : IDisposable
                 {
                     FlatpakReference.GPtrArrayUnref(installationsPtr);
                 }
+
                 return "Failed to get system installation.";
             }
 
@@ -918,7 +1264,8 @@ public class FlatpakManager : IDisposable
 
                 var scope = isSystemWide ? "system" : "user";
                 var gpgStatus = gpgVerify ? "enabled" : "disabled";
-                return $"Successfully modified remote '{remoteName}' in {scope} installation. GPG verification: {gpgStatus}";
+                return
+                    $"Successfully modified remote '{remoteName}' in {scope} installation. GPG verification: {gpgStatus}";
             }
             finally
             {
@@ -928,9 +1275,9 @@ public class FlatpakManager : IDisposable
         finally
         {
             if (installationsPtr != IntPtr.Zero)
-                {
-                    FlatpakReference.GPtrArrayUnref(installationsPtr);
-                }
+            {
+                FlatpakReference.GPtrArrayUnref(installationsPtr);
+            }
         }
     }
 
@@ -960,6 +1307,7 @@ public class FlatpakManager : IDisposable
                 {
                     FlatpakReference.GPtrArrayUnref(installationsPtr);
                 }
+
                 return "Failed to get system installation.";
             }
 
@@ -1179,7 +1527,7 @@ public class FlatpakManager : IDisposable
                 {
                     var errorMsg = FlatpakReference.GetErrorMessage(updateError);
                     FlatpakReference.GErrorFree(updateError);
-                    
+
                     if (errorMsg.Contains("No such ref 'appstream") || errorMsg.Contains("not found"))
                     {
                         results.Add($"{remoteName} ({scope}): no appstream data available");
@@ -1230,15 +1578,17 @@ public class FlatpakManager : IDisposable
                 appstreamPath = $"/var/lib/flatpak/appstream/{remote}/{targetArch}/active/appstream.xml.gz";
             }
 
-           
+
             if (!File.Exists(appstreamPath))
             {
                 var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                appstreamPath = Path.Combine(userHome, ".local/share/flatpak/appstream", remote, targetArch, "active/appstream.xml");
+                appstreamPath = Path.Combine(userHome, ".local/share/flatpak/appstream", remote, targetArch,
+                    "active/appstream.xml");
 
                 if (!File.Exists(appstreamPath))
                 {
-                    appstreamPath = Path.Combine(userHome, ".local/share/flatpak/appstream", remote, targetArch, "active/appstream.xml.gz");
+                    appstreamPath = Path.Combine(userHome, ".local/share/flatpak/appstream", remote, targetArch,
+                        "active/appstream.xml.gz");
                 }
             }
 
@@ -1301,7 +1651,7 @@ public class FlatpakManager : IDisposable
             }
         }
 
-   
+
         if (packages.Count == 0)
         {
             var userInstallationPtr = FlatpakReference.InstallationNewUser(IntPtr.Zero, out IntPtr userError);
@@ -1341,6 +1691,7 @@ public class FlatpakManager : IDisposable
                 Console.Error.WriteLine($"Failed to list remote refs for '{remoteName}': {errorMsg}");
                 FlatpakReference.GErrorFree(error);
             }
+
             return;
         }
 
@@ -1520,6 +1871,6 @@ public class FlatpakManager : IDisposable
 
     public void Dispose()
     {
-       //Currently just here to have it when needed.
+        //Currently just here to have it when needed.
     }
 }
