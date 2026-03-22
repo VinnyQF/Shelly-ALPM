@@ -10,7 +10,7 @@ public class WebWindow(string rootPackage, Dictionary<string, List<string>> depe
     private DrawingArea _canvas = null!;
 
     private double _zoom = 1.0;
-    
+
     private double _panX, _panY;
     private double _panStartX, _panStartY;
     private int _canvasW, _canvasH;
@@ -91,13 +91,11 @@ public class WebWindow(string rootPackage, Dictionary<string, List<string>> depe
         _canvasH = h;
         const double nodeSize = 60;
         const double ringStep = 140;
-        
+
         var levels = new Dictionary<string, int> { [rootPackage] = 0 };
         var queue = new Queue<string>();
         queue.Enqueue(rootPackage);
 
-        //omg walk a tree that CS degree i got is finally useful
-        //my algo prog would be so proud of me right now
         while (queue.Count > 0)
         {
             var current = queue.Dequeue();
@@ -109,7 +107,7 @@ public class WebWindow(string rootPackage, Dictionary<string, List<string>> depe
                 queue.Enqueue(dep);
             }
         }
-        
+
         _positions = new Dictionary<string, (double x, double y)>
         {
             [rootPackage] = (0, 0)
@@ -123,7 +121,10 @@ public class WebWindow(string rootPackage, Dictionary<string, List<string>> depe
         foreach (var (level, nodesAtLevel) in byLevel)
         {
             if (level == 0) continue;
-            var r = level * ringStep;
+
+            const double minSpacing = 70;
+            var minR = nodesAtLevel.Count * minSpacing / (2 * Math.PI);
+            var r = Math.Max(level * ringStep, minR);
 
             for (var i = 0; i < nodesAtLevel.Count; i++)
             {
@@ -131,12 +132,12 @@ public class WebWindow(string rootPackage, Dictionary<string, List<string>> depe
                 _positions[nodesAtLevel[i]] = (r * Math.Cos(angle), r * Math.Sin(angle));
             }
         }
-        
+
         cr.Translate(w / 2.0 + _panX, h / 2.0 + _panY);
         cr.Scale(_zoom, _zoom);
-        
+
         cr.SetSourceRgb(0.5, 0.5, 0.5);
-        cr.LineWidth = 1.5 / _zoom; // keep edge width visually constant
+        cr.LineWidth = 1.5 / _zoom;
 
         foreach (var (package, deps) in dependencyMap)
         {
@@ -149,7 +150,7 @@ public class WebWindow(string rootPackage, Dictionary<string, List<string>> depe
                 cr.Stroke();
             }
         }
-        
+
         (double R, double G, double B)[] levelColors =
         [
             (0.85, 0.35, 0.35),
@@ -181,7 +182,7 @@ public class WebWindow(string rootPackage, Dictionary<string, List<string>> depe
         cr.Stroke();
 
         cr.SetSourceRgb(1, 1, 1);
-        cr.SetFontSize(10 / zoom);
+        cr.SetFontSize(9 / zoom);
         cr.SelectFontFace("Sans", FontSlant.Normal, FontWeight.Bold);
         cr.TextExtents(label, out var te);
         cr.MoveTo(x - te.Width / 2, y + te.Height / 2);
