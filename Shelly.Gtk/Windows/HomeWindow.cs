@@ -74,6 +74,9 @@ public class HomeWindow(
         var exportSyncButton = (Button)builder.GetObject("ExportSyncButton")!;
         exportSyncButton.OnClicked += (sender, args) => { _ = ExportSync(); };
 
+        var upgradeAllButton = (Button)builder.GetObject("UpgradeAllButton")!;
+        upgradeAllButton.OnClicked += (sender, args) => { _ = UpgradeAll(); };
+
         var config = configService.LoadConfig();
         var aurBox = (Box)builder.GetObject("AurBox")!;
         var flatpakBox = (Box)builder.GetObject("FlatpakBox")!;
@@ -92,6 +95,18 @@ public class HomeWindow(
         };
 
         return _box;
+    }
+
+    private async Task UpgradeAll()
+    {
+        try
+        {
+            await privilegedOperationService.UpgradeAllAsync();
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+        }
     }
 
     private async Task ExportSync()
