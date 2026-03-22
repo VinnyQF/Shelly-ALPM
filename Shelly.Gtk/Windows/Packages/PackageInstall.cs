@@ -216,9 +216,35 @@ public class PackageInstall(
         }
 
         if (pkg.Depends.Count > 0)
-            AddDetail("Depends", string.Join(", ", pkg.Depends));
+        {
+            var expander = new Expander { Label = $"Depends ({pkg.Depends.Count})" };
+            expander.AddCssClass("dim-label");
+            var depBox = Box.New(Orientation.Vertical, 2);
+            depBox.MarginStart = 12;
+            foreach (var depLabel in pkg.Depends.Select(dep => Label.New(dep)))
+            {
+                depLabel.Halign = Align.Start;
+                depLabel.Xalign = 0;
+                depBox.Append(depLabel);
+            }
+            expander.SetChild(depBox);
+            _detailBox.Append(expander);
+        }
         if (pkg.OptDepends.Count > 0)
-            AddDetail("Optional Deps", string.Join(", ", pkg.OptDepends));
+        {
+            var optExpander = new Expander { Label = $"Optional Deps ({pkg.OptDepends.Count})" };
+            optExpander.AddCssClass("dim-label");
+            var optDepBox = Box.New(Orientation.Vertical, 2);
+            optDepBox.MarginStart = 12;
+            foreach (var depLabel in pkg.OptDepends.Select(dep => Label.New(dep)))
+            {
+                depLabel.Halign = Align.Start;
+                depLabel.Xalign = 0;
+                optDepBox.Append(depLabel);
+            }
+            optExpander.SetChild(optDepBox);
+            _detailBox.Append(optExpander);
+        }
         if (pkg.Licenses.Count > 0)
             AddDetail("Licenses", string.Join(", ", pkg.Licenses));
         if (pkg.Provides.Count > 0)
