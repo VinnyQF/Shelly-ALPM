@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using Shelly_CLI.Commands.Aur;
+using Shelly_CLI.Commands.Config;
 using Shelly_CLI.Commands.Flatpak;
 using Shelly_CLI.Commands.Keyring;
 using Shelly_CLI.Commands.Standard;
@@ -337,9 +338,10 @@ public class Program
                     .WithDescription("Adds a flatpak remote");
 
                 flatpak.AddCommand<FlatpakRemoveRemote>("remove-remotes").WithDescription("Removes a flatpak remote");
-                
-                flatpak.AddCommand<FlatpakInstallFromRefFile>("install-ref-file").WithDescription("Installs flatpak app from ref file");
-                
+
+                flatpak.AddCommand<FlatpakInstallFromRefFile>("install-ref-file")
+                    .WithDescription("Installs flatpak app from ref file");
+
                 flatpak.AddCommand<GetAppRemoteInfo>("app-remote-info").WithDescription("Get app remote info");
             });
 
@@ -357,6 +359,14 @@ public class Program
                     .WithExample("utility", "updates", "--aur")
                     .WithExample("utility", "updates", "-l")
                     .WithExample("utility", "updates", "--flatpak");
+            });
+
+            config.AddBranch("config", configure =>
+            {
+                configure.SetDescription("Configuration setup for shelly");
+                configure.AddCommand<SetParallelDownloads>("parallel")
+                    .WithDescription("Sets parallel download count")
+                    .WithExample("parallel", "10");
             });
         });
 

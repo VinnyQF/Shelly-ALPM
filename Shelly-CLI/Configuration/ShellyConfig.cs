@@ -6,5 +6,5 @@ public class ShellyConfig
 
     public string DefaultExecution { get; set; } = nameof(DefaultCommand.UpgradeAll);
 
-    public int ParallelDownloadCount { get; set; } = 1;
+    public int ParallelDownloadCount { get; set; } = 10;
 }
