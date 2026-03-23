@@ -244,30 +244,24 @@ public class AurRemove(
             {
                 lockoutService.Show($"Installing...");
 
-                try
-                {
-                    //do work
-                    var result = await privilegedOperationService.RemoveAurPackagesAsync(selectedPackages);
-                    if (!result.Success)
-                    {
-                        Console.WriteLine($"Failed to remove packages: {result.Error}");
-                    }
+                var result = await privilegedOperationService.RemoveAurPackagesAsync(selectedPackages);
 
-                    await LoadDataAsync();
-                }
-                finally
-                {
-                    lockoutService.Hide();
-
-                    var args = new ToastMessageEventArgs(
+                if (result.Success)
+                    genericQuestionService.RaiseToastMessage(new ToastMessageEventArgs(
                         $"Updated {selectedPackages.Count} Package(s)"
-                    );
-                    genericQuestionService.RaiseToastMessage(args);
-                }
+                    ));
+                else
+                    Console.WriteLine($"Failed to remove packages: {result.Error}");
+
+                await LoadDataAsync();
             }
             catch (Exception e)
             {
                 Console.WriteLine($"Failed to remove packages: {e.Message}");
+            }
+            finally
+            {
+                lockoutService.Hide();
             }
         }
     }
