@@ -43,7 +43,7 @@ public class CheckPackageUpdatesNonRootCommand : AsyncCommand<CheckPackageUpdate
             syncModel.Packages = syncPackageModels;
             if (settings.CheckAur)
             {
-                await aurManager.Initialize(false, true,false, dbPath);
+                await aurManager.Initialize(false, true, false, tempPath: dbPath);
                 aurPackages = await aurManager.GetPackagesNeedingUpdate();
                 aurManager.Dispose();
                 List<SyncAurModel> aurPackageModels = [];
@@ -84,7 +84,7 @@ public class CheckPackageUpdatesNonRootCommand : AsyncCommand<CheckPackageUpdate
             AnsiConsole.Status().Spinner(Spinner.Known.BouncingBall).Start("Initializing and syncing AUR packages",
                 async ctx =>
                 {
-                    aurManager.Initialize(false, true, false,dbPath);
+                    aurManager.Initialize(false, true, false, tempPath: dbPath);
                     aurPackages = await aurManager.GetPackagesNeedingUpdate();
                     aurManager.Dispose();
                 });
@@ -166,7 +166,7 @@ public class CheckPackageUpdatesNonRootCommand : AsyncCommand<CheckPackageUpdate
             syncModel.Packages = syncPackageModels;
             if (settings.CheckAur)
             {
-                aurManager.Initialize(false, true, false,dbPath);
+                aurManager.Initialize(false, true, false, tempPath: dbPath);
                 aurPackages = await aurManager.GetPackagesNeedingUpdate();
                 aurManager.Dispose();
                 List<SyncAurModel> aurPackageModels = [];
@@ -202,7 +202,7 @@ public class CheckPackageUpdatesNonRootCommand : AsyncCommand<CheckPackageUpdate
         if (settings.CheckAur)
         {
             Console.Error.WriteLine("Initializing AUR packages");
-            await aurManager.Initialize(false, true, false,dbPath);
+            await aurManager.Initialize(false, true, false, tempPath: dbPath);
             aurPackages = await aurManager.GetPackagesNeedingUpdate();
             aurManager.Dispose();
             Console.Error.WriteLine("Finished checking AUR");
