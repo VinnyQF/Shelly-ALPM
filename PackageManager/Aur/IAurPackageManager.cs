@@ -1,13 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using PackageManager.Alpm;
 using PackageManager.Aur.Models;
 
 namespace PackageManager.Aur;
 
 public interface IAurPackageManager : IDisposable
 {
-    Task Initialize(bool root = false, bool useTempPath = false, string tempPath = "");
+    Task Initialize(bool root = false, bool useTempPath = false, bool useChroot = false,
+        string chrootPath = "/var/lib/shelly/chroot", string tempPath = "");
 
     Task<List<AurPackageDto>> GetInstalledPackages();
     Task<List<AurPackageDto>> SearchPackages(string query);
@@ -18,5 +20,5 @@ public interface IAurPackageManager : IDisposable
 
     Task InstallPackages(List<string> packageNames);
 
-    Task RemovePackages(List<string> packageNames);
+    Task RemovePackages(List<string> packageNames, AlpmTransFlag flags = AlpmTransFlag.None);
 }

@@ -9,6 +9,7 @@
             <Type Name="Shelly_CLI.SortDirection" Dynamic="Required All"/>
             <!-- Standard commands -->
             <Type Name="Shelly_CLI.Commands.DefaultCommand" Dynamic="Required All"/>
+            <Type Name="Shelly_CLI.Commands.DefaultCommandSettings" Dynamic="Required All"/>
             <Type Name="Shelly_CLI.Commands.Standard.VersionCommand" Dynamic="Required All"/>
             <Type Name="Shelly_CLI.Commands.Standard.SyncSettings" Dynamic="Required All"/>
             <Type Name="Shelly_CLI.Commands.Standard.SyncCommand" Dynamic="Required All"/>
@@ -56,6 +57,7 @@
             <Type Name="Shelly_CLI.Commands.Aur.AurUpgradeCommand" Dynamic="Required All"/>
             <Type Name="Shelly_CLI.Commands.Aur.AurRemoveCommand" Dynamic="Required All"/>
             <Type Name="Shelly_CLI.Commands.Aur.AurSearchPackageBuild" Dynamic="Required All"/>
+            <Type Name="Shelly_CLI.Commands.Aur.AurRemovePackageSettings" Dynamic="Required All"/>
             <!-- Flatpak commands -->
             <Type Name="Shelly_CLI.Commands.Flatpak.FlathubSearchSettings" Dynamic="Required All"/>
             <Type Name="Shelly_CLI.Commands.Flatpak.FlathubSearchCommand" Dynamic="Required All"/>

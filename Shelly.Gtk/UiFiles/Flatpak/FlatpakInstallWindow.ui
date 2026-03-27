@@ -20,7 +20,7 @@
                                 <property name="vexpand">true</property>
                                 <property name="hexpand">true</property>
                                 <child>
-                                    <object class="GtkListView" id="list_flatpaks"/>
+                                    <object class="GtkGridView" id="list_flatpaks"/>
                                 </child>
                             </object>
                         </child>
@@ -50,6 +50,15 @@
                                         <child>
                                             <object class="GtkBox">
                                                 <property name="hexpand">true</property>
+                                            </object>
+                                        </child>
+                                        <child>
+                                            <object class="GtkButton" id="overlay_show_plugin_button">
+                                                <property name="label">Manage Addons</property>
+                                                <property name="visible">false</property>
+                                                <style>
+                                                    <class name="suggested-action"/>
+                                                </style>
                                             </object>
                                         </child>
                                         <child>

@@ -153,6 +153,38 @@ public class FlatpakManager : IDisposable
         return false;
     }
 
+    public FlatpakPackageDto FindAppByNameOrId(string nameOrId)
+    {
+        var installationsPtr = FlatpakReference.GetSystemInstallations(IntPtr.Zero, out IntPtr error);
+
+        if (error != IntPtr.Zero || installationsPtr == IntPtr.Zero)
+        {
+            return new FlatpakPackageDto();
+        }
+
+        try
+        {
+            var dataPtr = Marshal.ReadIntPtr(installationsPtr);
+            var length = Marshal.ReadInt32(installationsPtr + IntPtr.Size);
+
+            for (var i = 0; i < length; i++)
+            {
+                var installationPtr = Marshal.ReadIntPtr(dataPtr + i * IntPtr.Size);
+                if (installationPtr == IntPtr.Zero) continue;
+
+                var match = FindInstalledApp(installationPtr, nameOrId);
+
+                return match ?? new FlatpakPackageDto();
+            }
+        }
+        finally
+        {
+            FlatpakReference.GPtrArrayUnref(installationsPtr);
+        }
+
+        return new FlatpakPackageDto();
+    }
+
     /// <summary>
     /// Finds an installed app by ID or friendly name within an installation.
     /// </summary>
@@ -326,18 +358,18 @@ public class FlatpakManager : IDisposable
         try
         {
             var refData = File.ReadAllBytes(refLocation);
-            
+
             var bytePtr = FlatpakReference.GBytesNew(refData, (nuint)refData.Length);
 
             if (bytePtr == IntPtr.Zero)
             {
                 return "Failed to create GBytes from ref file.";
             }
-            
+
             var transactionPtr = FlatpakReference.TransactionNewForInstallation(
                 installationPtr, IntPtr.Zero, out IntPtr transactionError);
-            
-            
+
+
             if (transactionError != IntPtr.Zero || transactionPtr == IntPtr.Zero)
             {
                 return "Failed to create installation transaction.";
@@ -404,7 +436,8 @@ public class FlatpakManager : IDisposable
     /// <param name="isUser">Whether to install to user installation (true) or system installation (false)</param>
     /// <param name="branch"></param>
     /// <returns>A result message indicating success or failure</returns>
-    public string InstallApp(string appId, string? remoteName = null, bool isUser = false, string branch = "stable")
+    public string InstallApp(string appId, string? remoteName = null, bool isUser = false, string branch = "stable",
+        bool isRuntime = false)
     {
         IntPtr installationPtr;
         IntPtr installationsPtr = IntPtr.Zero;
@@ -454,11 +487,12 @@ public class FlatpakManager : IDisposable
                 return "No remote repository configured. Add a remote like 'flathub' first.";
             }
 
-            var refString = $"app/{appId}/{GetCurrentArch()}/{branch}";
+            var refString = isRuntime ? $"runtime/{appId}/{GetCurrentArch()}/{branch}" : $"app/{appId}/{GetCurrentArch()}/{branch}";
+
 
             var transactionPtr = FlatpakReference.TransactionNewForInstallation(
                 installationPtr, IntPtr.Zero, out IntPtr transactionError);
-            
+
             FlatpakReference.InstallationUpdateRemoteSync(
                 installationPtr, remote, IntPtr.Zero, out IntPtr updateError);
 
@@ -1073,7 +1107,7 @@ public class FlatpakManager : IDisposable
         {
             var actualUrl = remoteUrl;
             var actualGpgVerify = gpgVerify;
-            
+
             if (remoteUrl.EndsWith(".flatpakrepo", StringComparison.OrdinalIgnoreCase))
             {
                 var repoConfig = DownloadAndParseFlatpakrepo(remoteUrl);
@@ -1087,7 +1121,7 @@ public class FlatpakManager : IDisposable
 
                 Console.Error.WriteLine($"Parsed .flatpakrepo: URL={actualUrl}, GPGVerify={actualGpgVerify}");
             }
-            
+
             var remotePtr = FlatpakReference.RemoteNew(remoteName);
             if (remotePtr == IntPtr.Zero)
             {
@@ -1734,7 +1768,6 @@ public class FlatpakManager : IDisposable
 
         FlatpakReference.GObjectUnref(remoteRef);
         return remoteRefInfo;
-        
     }
 
     /// <summary>
@@ -1930,7 +1963,7 @@ public class FlatpakManager : IDisposable
             var content = httpClient.GetStringAsync(url).GetAwaiter().GetResult();
 
             var config = new FlatpakrepoConfig();
-            
+
             foreach (var line in content.Split('\n'))
             {
                 var trimmed = line.Trim();

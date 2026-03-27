@@ -172,22 +172,26 @@ public class UnprivilegedOperationService : IUnprivilegedOperationService
         return await ExecuteUnprivilegedCommandAsync("Update package", "flatpak update", package);
     }
 
-    public async Task<UnprivilegedOperationResult> RemoveFlatpakPackage(string package)
+    public async Task<UnprivilegedOperationResult> RemoveFlatpakPackage(string package, bool removeConfig)
     {
+        if(removeConfig)
+        {
+            return await ExecuteUnprivilegedCommandAsync("Remove package", "flatpak uninstall", package, "-c");
+        }
         return await ExecuteUnprivilegedCommandAsync("Remove package", "flatpak uninstall", package);
     }
 
     public async Task<UnprivilegedOperationResult> InstallFlatpakPackage(string package, bool user, string remote,
-        string branch)
+        string branch, bool isRuntime = false)
     {
         if (user)
         {
             return await ExecuteUnprivilegedCommandAsync("Install package", "flatpak install", package, "--user",
-                "--remote", remote, "--branch", branch);
+                "--remote", remote, "--branch", branch, isRuntime ? "--runtime" : "");
         }
 
         return await ExecuteUnprivilegedCommandAsync("Install package", "flatpak install", package, "--remote", remote,
-            "--branch", branch);
+            "--branch", branch, isRuntime ? "--runtime" : "");
     }
 
     public async Task<UnprivilegedOperationResult> FlatpakUpgrade()
@@ -219,7 +223,7 @@ public class UnprivilegedOperationService : IUnprivilegedOperationService
         return await ExecuteUnprivilegedCommandAsync("Remove Remote", "flatpak remove-remotes", remoteName, "--system",
             "true");
     }
-    
+
     public async Task<UnprivilegedOperationResult> FlatpakInsallFromRef(string path, string scope)
     {
         if (scope == "user")
@@ -262,6 +266,35 @@ public class UnprivilegedOperationService : IUnprivilegedOperationService
         }
 
         return 0;
+    }
+
+    public async Task<List<AlpmPackageUpdateDto>> CheckForStandardApplicationUpdates()
+    {
+        var result = await ExecuteUnprivilegedCommandAsync("Get Available Updates", "list-updates --json");
+        try
+        {
+            var lines = result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var line in lines)
+            {
+                var trimmedLine = StripBom(line.Trim());
+                if (trimmedLine.StartsWith("{") && trimmedLine.EndsWith("}"))
+                {
+                    var updates =
+                        System.Text.Json.JsonSerializer.Deserialize(trimmedLine,
+                            ShellyGtkJsonContext.Default.ListAlpmPackageUpdateDto);
+                    return updates ?? [];
+                }
+            }
+
+            var allUpdates = System.Text.Json.JsonSerializer.Deserialize(StripBom(result.Output.Trim()),
+                ShellyGtkJsonContext.Default.ListAlpmPackageUpdateDto);
+            return allUpdates ?? [];
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to parse updates JSON: {ex.Message}");
+            return [];
+        }
     }
 
     public async Task<UnprivilegedOperationResult> ExportSyncFile(string filePath, string name)

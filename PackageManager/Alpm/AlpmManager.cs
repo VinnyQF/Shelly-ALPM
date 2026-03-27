@@ -144,7 +144,7 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
 
 
         //Resolve 'auto' architecture to the actual system architecture
-        string resolvedArch = _config.Architecture;
+        string resolvedArch = _config.Architecture.Split(" ").FirstOrDefault() ?? "auto";
         if (resolvedArch.Equals("auto", StringComparison.OrdinalIgnoreCase))
         {
             resolvedArch = RuntimeInformation.ProcessArchitecture switch
@@ -502,7 +502,8 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
                 PooledConnectionLifetime = TimeSpan.FromMinutes(2),
                 AutomaticDecompression = System.Net.DecompressionMethods.All,
                 AllowAutoRedirect = true,
-                MaxAutomaticRedirections = 10
+                MaxAutomaticRedirections = 10,
+                UseProxy = true,
             };
             client = new HttpClient(handler);
             client.Timeout = TimeSpan.FromMinutes(30);
@@ -1352,6 +1353,34 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
         var pkgCache = DbGetPkgCache(localDbPtr);
         var pkgPtr = PkgFindSatisfier(pkgCache, dependency);
         return pkgPtr != IntPtr.Zero;
+    }
+
+    public bool IsDepdencySatisfiedBySyncDbs(string dependency)
+    {
+        return FindSatisfierInSyncDbs(dependency) != null;
+    }
+
+    public string? FindSatisfierInSyncDbs(string dependency)
+    {
+        if (_handle == IntPtr.Zero) Initialize();
+        var syncDbsPtr = GetSyncDbs(_handle);
+        var currentPtr = syncDbsPtr;
+
+        while (currentPtr != IntPtr.Zero)
+        {
+            var node = Marshal.PtrToStructure<AlpmList>(currentPtr);
+            if (node.Data != IntPtr.Zero)
+            {
+                var dbPkgCache = DbGetPkgCache(node.Data);
+                var pkgPtr = PkgFindSatisfier(dbPkgCache, dependency);
+                if (pkgPtr != IntPtr.Zero)
+                    return Marshal.PtrToStringUTF8(GetPkgName(pkgPtr));
+            }
+
+            currentPtr = node.Next;
+        }
+
+        return null;
     }
 
     public void InstallDependenciesOnly(string packageName,
