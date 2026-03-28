@@ -139,8 +139,6 @@ public class InstallCommand : Command<InstallPackageSettings>
 
         manager.Dispose();
         AnsiConsole.MarkupLine("[green]Packages installed successfully![/]");
-        manager.Dispose();
-        AnsiConsole.MarkupLine("[green]Packages installed successfully![/]");
         return 0;
     }
 
@@ -161,7 +159,7 @@ public class InstallCommand : Command<InstallPackageSettings>
             }).Wait();
         }
 
-        var manager = new AlpmManager();
+        using var manager = new AlpmManager();
         manager.Question += (sender, args) => { QuestionHandler.HandleQuestion(args, true, settings.NoConfirm); };
         Console.Error.WriteLine("Initializing ALPM...");
         manager.Initialize(true);
@@ -207,11 +205,9 @@ public class InstallCommand : Command<InstallPackageSettings>
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[ALPM_ERROR]Failed to install packages: {ex.Message}");
-            manager.Dispose();
             return 1;
         }
-
-        manager.Dispose();
+        
         return 0;
     }
 }
