@@ -5,7 +5,10 @@ using Shelly.Gtk.Services.TrayServices;
 using Shelly.Gtk.UiModels;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using GLib;
 using Shelly.Gtk.Windows.Dialog;
+using DateTime = System.DateTime;
+using TimeSpan = System.TimeSpan;
 
 
 namespace Shelly.Gtk.Windows;
@@ -19,15 +22,17 @@ public class Settings(
     private Box _box = null!;
     private ShellyConfig _config = null!;
     private Overlay? _parentOverlay;
-    private List<ReleaseNotesDialog.ReleaseItem>? _cachedReleaseList = null!;
-    private string? _cachedLatestVersion = null!;
+    private static List<ReleaseNotesDialog.ReleaseItem>? _cachedReleaseList = null!;
+    private static string? _cachedLatestVersion = null!;
+    private static DateTime _lastVersionCheck = DateTime.MinValue;
+    private static readonly TimeSpan VersionCheckInterval = TimeSpan.FromMinutes(5);
 
     public void SetParentOverlay(Overlay overlay)
     {
         _parentOverlay = overlay;
     }
     
-    private static readonly HttpClient _httpClient = new()
+    private static readonly HttpClient HttpClient = new()
     {
         DefaultRequestHeaders = { UserAgent = { new("Shelly-ALPM", null) } }
     };
@@ -396,11 +401,19 @@ public class Settings(
         
         try
         {
+            if (_cachedReleaseList is not null && 
+                DateTime.UtcNow - _lastVersionCheck < VersionCheckInterval)
+            {
+                Console.WriteLine("Cached releases used (skipping version check)");
+                ReleaseNotesDialog.ShowReleaseHistoryDialog(_parentOverlay, _cachedReleaseList);
+                return;
+            }
             
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Shelly-ALPM");
+            HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Shelly-ALPM");
 
             var url = "https://api.github.com/repos/Seafoam-Labs/Shelly-ALPM/releases";
-            var latestJson = await _httpClient.GetStringAsync($"{url}/latest");
+            var latestJson = await HttpClient.GetStringAsync($"{url}/latest");
+            _lastVersionCheck = DateTime.UtcNow;
             using var latestDoc = JsonDocument.Parse(latestJson);
             var latestTag = latestDoc.RootElement
                 .TryGetProperty("tag_name", out var tagProp)
@@ -414,7 +427,7 @@ public class Settings(
                 return;
             }
             
-            var json = await _httpClient.GetStringAsync(url);
+            var json = await HttpClient.GetStringAsync(url);
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
 
