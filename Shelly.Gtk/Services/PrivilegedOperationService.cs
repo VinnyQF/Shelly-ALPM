@@ -760,6 +760,22 @@ public class PrivilegedOperationService : IPrivilegedOperationService
                                 await SafeWriteAsync(args.Response == 1 ? "y" : "n");
                             }
                         }
+                        else if (e.Data.StartsWith("[Shelly][ALPM_SCRIPTLET]"))
+                        {
+                            var line = e.Data.Substring("[Shelly][ALPM_SCRIPTLET]".Length);
+                            if (!string.IsNullOrEmpty(line))
+                            {
+                                _alpmEventService.RaiseScriptletInfo(new ScriptletInfoEventArgs(line));
+                            }
+                        }
+                        else if (e.Data.StartsWith("[Shelly][ALPM_HOOK]"))
+                        {
+                            var line = e.Data.Substring("[Shelly][ALPM_HOOK]".Length);
+                            if (!string.IsNullOrEmpty(line))
+                            {
+                                _alpmEventService.RaiseHookInfo(new HookInfoEventArgs(line));
+                            }
+                        }
                         // Check for generic ALPM question (yes/no)
                         else if (e.Data.StartsWith("[Shelly][ALPM_QUESTION]"))
                         {

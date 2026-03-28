@@ -181,6 +181,103 @@ sealed class Program
             };
 
             var alpmEventService = serviceProvider.GetRequiredService<IAlpmEventService>();
+            
+            // Buffer scriptlet lines and show a single consolidated toast after output settles
+            var scriptletLines = new System.Collections.Generic.List<string>();
+            uint scriptletTimerId = 0;
+            
+            alpmEventService.ScriptletInfo += (s, e) =>
+            {
+                lock (scriptletLines)
+                {
+                    scriptletLines.Add(e.Line);
+                }
+                
+                // Debounce: reset timer on each new line, show toast 500ms after last line
+                GLib.Functions.IdleAdd(0, () =>
+                {
+                    if (scriptletTimerId != 0)
+                    {
+                        GLib.Functions.SourceRemove(scriptletTimerId);
+                        scriptletTimerId = 0;
+                    }
+                    
+                    scriptletTimerId = GLib.Functions.TimeoutAdd(0, 500, () =>
+                    {
+                        scriptletTimerId = 0;
+                        string message;
+                        lock (scriptletLines)
+                        {
+                            message = string.Join("\n", scriptletLines).Trim();
+                            scriptletLines.Clear();
+                        }
+                        
+                        if (!string.IsNullOrEmpty(message))
+                        {
+                            // Truncate if too long for a toast
+                            if (message.Length > 300)
+                            {
+                                message = message[..300] + "\n...";
+                            }
+                            var toastArgs = new UiModels.ToastMessageEventArgs(message);
+                            ToastMessageDialog.ShowToastMessage(mainOverlay, toastArgs);
+                        }
+                        
+                        return false;
+                    });
+                    
+                    return false;
+                });
+            };
+
+            // Buffer hook lines and show a single consolidated toast after output settles
+            var hookLines = new System.Collections.Generic.List<string>();
+            uint hookTimerId = 0;
+            
+            alpmEventService.HookInfo += (s, e) =>
+            {
+                lock (hookLines)
+                {
+                    hookLines.Add(e.Line);
+                }
+                
+                // Debounce: reset timer on each new line, show toast 500ms after last line
+                GLib.Functions.IdleAdd(0, () =>
+                {
+                    if (hookTimerId != 0)
+                    {
+                        GLib.Functions.SourceRemove(hookTimerId);
+                        hookTimerId = 0;
+                    }
+                    
+                    hookTimerId = GLib.Functions.TimeoutAdd(0, 500, () =>
+                    {
+                        hookTimerId = 0;
+                        string message;
+                        lock (hookLines)
+                        {
+                            message = string.Join("\n", hookLines).Trim();
+                            hookLines.Clear();
+                        }
+                        
+                        if (!string.IsNullOrEmpty(message))
+                        {
+                            // Truncate if too long for a toast
+                            if (message.Length > 300)
+                            {
+                                message = message[..300] + "\n...";
+                            }
+                            var toastArgs = new UiModels.ToastMessageEventArgs(message);
+                            ToastMessageDialog.ShowToastMessage(mainOverlay, toastArgs);
+                        }
+                        
+                        return false;
+                    });
+                    
+                    return false;
+                });
+            };
+
             alpmEventService.Question += (s, e) =>
             {
                 GLib.Functions.IdleAdd(0, () =>

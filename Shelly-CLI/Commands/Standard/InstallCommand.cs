@@ -123,8 +123,7 @@ public class InstallCommand : Command<InstallPackageSettings>
                 lastPercent = pct;
             }
         };
-
-
+        
         manager.InstallPackages(packageList);
         Console.WriteLine(); // Final newline after last package
 

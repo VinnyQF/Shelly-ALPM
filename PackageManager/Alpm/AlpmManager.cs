@@ -39,6 +39,7 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
     public event EventHandler<AlpmPackageOperationEventArgs>? PackageOperation;
     public event EventHandler<AlpmQuestionEventArgs>? Question;
     public event EventHandler<AlpmReplacesEventArgs>? Replaces;
+    public event EventHandler<AlpmScriptletEventArgs>? ScriptletInfo;
 
     public void IntializeWithSync()
     {
@@ -1812,7 +1813,16 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
 
                 case AlpmEventType.ScriptletInfo:
                 {
-                    Console.Error.WriteLine("[ALPM] Running scriptlet...");
+                    var scriptletEvent = Marshal.PtrToStructure<AlpmEventScriptletInfo>(eventPtr);
+                    string? line = scriptletEvent.Line != IntPtr.Zero
+                        ? Marshal.PtrToStringUTF8(scriptletEvent.Line)
+                        : null;
+
+                    if (!string.IsNullOrEmpty(line))
+                    {
+                        Console.Error.WriteLine($"[ALPM_SCRIPTLET]{line}");
+                        ScriptletInfo?.Invoke(this, new AlpmScriptletEventArgs(line));
+                    }
                     break;
                 }
 
@@ -1825,7 +1835,21 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
 
                 case AlpmEventType.HookRunStart:
                 {
-                    Console.Error.WriteLine("[ALPM] Running hook...");
+                    var hookEvent = Marshal.PtrToStructure<AlpmEventHookRun>(eventPtr);
+                    string? name = hookEvent.Name != IntPtr.Zero
+                        ? Marshal.PtrToStringUTF8(hookEvent.Name)
+                        : null;
+                    string? desc = hookEvent.Desc != IntPtr.Zero
+                        ? Marshal.PtrToStringUTF8(hookEvent.Desc)
+                        : null;
+                    var position = (ulong)hookEvent.Position;
+                    var total = (ulong)hookEvent.Total;
+
+                    var hookLine = !string.IsNullOrEmpty(desc)
+                        ? $"({position}/{total}) {desc}"
+                        : $"({position}/{total}) {name ?? "Running hook..."}";
+
+                    Console.Error.WriteLine($"[ALPM_HOOK]{hookLine}");
                     break;
                 }
                 case AlpmEventType.HookRunDone:
