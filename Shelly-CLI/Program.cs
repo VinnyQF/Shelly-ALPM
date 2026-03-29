@@ -99,6 +99,7 @@ public class Program
                 .WithExample("sync");
 
             config.AddCommand<ListInstalledCommand>("list-installed")
+                .WithAlias("li")
                 .WithDescription("List all installed packages")
                 .WithExample("list-installed")
                 .WithExample("list-installed", "--sort", "name")
