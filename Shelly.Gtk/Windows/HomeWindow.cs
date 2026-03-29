@@ -19,6 +19,7 @@ public class HomeWindow(
     IIconResolverService iconResolverService,
     IGenericQuestionService genericQuestionService,
     IArchNewsService archNewsService,
+    IOperationLogService operationLogService,
     MetaSearch metaSearch) : IShellyWindow
 {
     private Box _box = null!;
@@ -37,6 +38,7 @@ public class HomeWindow(
     private Label? _packagePercentLabel;
     private Label? _totalFlatpakLabel;
     private Label? _flatpakPercentLabel;
+    private ListBox? _operationLogListBox;
 
     public Widget CreateWindow()
     {
@@ -137,6 +139,9 @@ public class HomeWindow(
 
         _ = LoadArchNews(_cts.Token);
 
+        _operationLogListBox = (ListBox)builder.GetObject("OperationLogListBox")!;
+        _ = LoadOperationLog(_cts.Token);
+
         return overlay;
     }
 
@@ -230,6 +235,8 @@ public class HomeWindow(
             tasks.Add(LoadPercentFlatpak(_flatpakPercentLabel, _cts.Token));
         if (_updatesListBox is not null)
             tasks.Add(LoadUpdatesPanel(_updatesListBox, _cts.Token));
+        if (_operationLogListBox is not null)
+            tasks.Add(LoadOperationLog(_cts.Token));
 
         await Task.WhenAll(tasks);
     }
@@ -650,6 +657,110 @@ public class HomeWindow(
         _archNewsPrevButton!.Sensitive = false;
         _archNewsNextButton!.Sensitive = false;
         _archNewsPageLabel!.SetText("0 / 0");
+    }
+
+    private async Task LoadOperationLog(CancellationToken ct)
+    {
+        try
+        {
+            var entries = await operationLogService.GetRecentOperationsAsync(8);
+            ct.ThrowIfCancellationRequested();
+
+            GLib.Functions.IdleAdd(0, () =>
+            {
+                if (_operationLogListBox is null) return false;
+
+                while (_operationLogListBox.GetFirstChild() is { } child)
+                    _operationLogListBox.Remove(child);
+
+                if (entries.Count == 0)
+                {
+                    var placeholder = Label.New("No recent activity");
+                    placeholder.AddCssClass("dim-label");
+                    placeholder.Halign = Align.Center;
+                    placeholder.MarginTop = 20;
+                    var row = new ListBoxRow();
+                    row.SetActivatable(false);
+                    row.SetChild(placeholder);
+                    _operationLogListBox.Append(row);
+                    return false;
+                }
+
+                foreach (var entry in entries)
+                {
+                    var row = new ListBoxRow();
+                    row.SetActivatable(false);
+
+                    var hbox = Box.New(Orientation.Horizontal, 10);
+                    hbox.MarginStart = 5;
+                    hbox.MarginEnd = 5;
+                    hbox.MarginTop = 4;
+                    hbox.MarginBottom = 4;
+
+                    var icon = Image.NewFromIconName(GetIconForCommand(entry.Command));
+                    icon.SetPixelSize(16);
+                    hbox.Append(icon);
+
+                    var cmdLabel = Label.New(entry.Command);
+                    cmdLabel.SetXalign(0);
+                    cmdLabel.Hexpand = true;
+                    cmdLabel.Ellipsize = Pango.EllipsizeMode.End;
+                    hbox.Append(cmdLabel);
+
+                    var timeLabel = Label.New(FormatRelativeTime(entry.Timestamp));
+                    timeLabel.AddCssClass("dim-label");
+                    timeLabel.AddCssClass("caption");
+                    hbox.Append(timeLabel);
+
+                    if (entry.ExitCode.HasValue)
+                    {
+                        var statusIcon = Image.NewFromIconName(
+                            entry.ExitCode == 0 ? "emblem-ok-symbolic" : "dialog-error-symbolic");
+                        statusIcon.SetPixelSize(16);
+                        hbox.Append(statusIcon);
+                    }
+                    else
+                    {
+                        var inProgressLabel = Label.New("⏳");
+                        hbox.Append(inProgressLabel);
+                    }
+
+                    row.SetChild(hbox);
+                    _operationLogListBox.Append(row);
+                }
+
+                return false;
+            });
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"Failed to load operation log: {e.Message}");
+        }
+    }
+
+    private static string GetIconForCommand(string command)
+    {
+        if (command.Contains("sync", StringComparison.OrdinalIgnoreCase))
+            return "emblem-synchronizing-symbolic";
+        if (command.Contains("install", StringComparison.OrdinalIgnoreCase))
+            return "list-add-symbolic";
+        if (command.Contains("remove", StringComparison.OrdinalIgnoreCase))
+            return "list-remove-symbolic";
+        if (command.Contains("upgrade", StringComparison.OrdinalIgnoreCase) ||
+            command.Contains("update", StringComparison.OrdinalIgnoreCase))
+            return "software-update-available-symbolic";
+        return "utilities-terminal-symbolic";
+    }
+
+    private static string FormatRelativeTime(DateTime timestamp)
+    {
+        var diff = DateTime.Now - timestamp;
+        if (diff.TotalMinutes < 1) return "just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes} min ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 2) return "yesterday";
+        if (diff.TotalDays < 30) return $"{(int)diff.TotalDays}d ago";
+        return timestamp.ToString("MMM d");
     }
 
     public void Dispose()
