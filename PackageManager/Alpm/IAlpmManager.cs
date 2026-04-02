@@ -51,7 +51,7 @@ public interface IAlpmManager
     /// <param name="packageName">Name of the package that dependencies are being installed for</param>
     /// <param name="includeMakeDeps"></param>
     /// <param name="flags">Flags that should be used for the installation</param>
-    void InstallDependenciesOnly(string packageName, bool includeMakeDeps = false,
+    Task InstallDependenciesOnly(string packageName, bool includeMakeDeps = false,
         AlpmTransFlag flags = AlpmTransFlag.None);
 
     /// <summary>

@@ -1425,7 +1425,7 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
         return null;
     }
 
-    public void InstallDependenciesOnly(string packageName,
+    public Task InstallDependenciesOnly(string packageName,
         bool includeMakeDeps = false,
         AlpmTransFlag flags = AlpmTransFlag.None)
     {
@@ -1449,7 +1449,7 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
         if (pkgPtr == IntPtr.Zero)
         {
             Console.WriteLine($"Package '{packageName}' not found");
-            return;
+            return Task.CompletedTask;
         }
 
         var dependencies = GetDependencyList(GetPkgDepends(pkgPtr));
@@ -1465,9 +1465,10 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
         var installedPackages = GetInstalledPackages().ToDictionary(x => x.Name, x => x.Version);
         var dependencyToInstall = dependencies.Where(x => !installedPackages.ContainsKey(x)).ToList();
 
-        if (dependencyToInstall.Count == 0) return;
+        if (dependencyToInstall.Count == 0) return Task.CompletedTask;
 
         InstallPackages(dependencyToInstall, flags);
+        return Task.CompletedTask;
     }
 
     public void Refresh()
