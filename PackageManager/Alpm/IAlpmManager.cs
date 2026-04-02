@@ -38,7 +38,7 @@ public interface IAlpmManager
 
     Task SyncSystemUpdate(AlpmTransFlag flags = AlpmTransFlag.None);
 
-    void InstallLocalPackage(string path, AlpmTransFlag flags = AlpmTransFlag.None);
+    Task InstallLocalPackage(string path, AlpmTransFlag flags = AlpmTransFlag.None);
 
     /// <summary>
     /// This installs the first package that provides a given dependency.

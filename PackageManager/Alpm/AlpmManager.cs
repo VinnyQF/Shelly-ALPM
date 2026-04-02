@@ -1300,7 +1300,7 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
         }
     }
 
-    public void InstallLocalPackage(string path, AlpmTransFlag flags = AlpmTransFlag.None)
+    public Task InstallLocalPackage(string path, AlpmTransFlag flags = AlpmTransFlag.None)
     {
         if (_handle == IntPtr.Zero) Initialize();
 
@@ -1361,6 +1361,7 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
             TransRelease(_handle);
             Refresh();
         }
+        return Task.CompletedTask;
     }
 
     public string GetPackageNameFromProvides(string provides, AlpmTransFlag flags = AlpmTransFlag.None)
