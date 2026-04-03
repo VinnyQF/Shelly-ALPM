@@ -39,14 +39,12 @@ public class IconDownloadService : IIConDownloadService
             if (File.Exists(hashFile))
             {
                 var currentHash = await File.ReadAllTextAsync(hashFile);
-                if (currentHash.Trim() == asset.Digest.Trim())
+                if (currentHash.Trim() == asset?.Digest.Trim())
                 {
-                    Console.WriteLine("[INFO] Icons are up to date (hash matches).");
                     return true;
                 }
             }
             
-
             var downloadUrl = asset?.BrowserDownloadUrl ?? latestRelease.TarballUrl;
             if (string.IsNullOrEmpty(downloadUrl)) return false;
 
@@ -57,6 +55,11 @@ public class IconDownloadService : IIConDownloadService
             await using var gzipStream = new GZipStream(stream, CompressionMode.Decompress);
             
             await TarFile.ExtractToDirectoryAsync(gzipStream, iconFolder, overwriteFiles: true);
+            
+            if (asset != null && !string.IsNullOrEmpty(asset.Digest))
+            {
+                await File.WriteAllTextAsync(hashFile, asset.Digest);
+            }
             
             return true;
         }
