@@ -902,6 +902,11 @@ public class FlatpakManager : IDisposable
     /// <returns>A result message indicating success or failure</returns>
     public string UpdateAllFlatpak()
     {
+        if (!NativeResolver.IsLibraryAvailable(FlatpakReference.LibName))
+        {
+            return string.Empty;
+        }
+
         var installationsPtr = FlatpakReference.GetSystemInstallations(IntPtr.Zero, out var error);
 
         if (error != IntPtr.Zero || installationsPtr == IntPtr.Zero)
@@ -1771,7 +1776,7 @@ public class FlatpakManager : IDisposable
             FlatpakReference.GObjectUnref(remoteRef);
             return remoteRefInfo;
         }
-     
+
         installation = FlatpakReference.InstallationNewUser(IntPtr.Zero, out _);
 
         remoteRef = FlatpakReference.InstallationFetchRemoteRefsSync(installation, remote, 0, name,
@@ -1787,7 +1792,7 @@ public class FlatpakManager : IDisposable
             FlatpakReference.GObjectUnref(remoteRef);
             return remoteRefInfo;
         }
-        
+
         return new FlatpakRemoteRefInfo();
     }
 
