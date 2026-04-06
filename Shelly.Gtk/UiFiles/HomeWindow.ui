@@ -81,7 +81,7 @@
             <property name="orientation">horizontal</property>
             <property name="spacing">10</property>
             <property name="hexpand">true</property>
-            <property name="homogeneous">true</property>
+            <!--<property name="homogeneous">true</property>-->
             <property name="vexpand">false</property>
             <property name="valign">end</property>
             <child>
@@ -160,7 +160,7 @@
                     </child>
                     <child>
                       <object class="GtkBox">
-                        <property name="homogeneous">true</property>
+                       <!-- <property name="homogeneous">true</property>-->
                         <property name="orientation">horizontal</property>
                         <property name="spacing">20</property>
                         <child>
@@ -271,7 +271,7 @@
                         <property name="row-spacing">10</property>
                         <property name="column-spacing">10</property>
                         <property name="margin-top">10</property>
-                        <property name="column-homogeneous">true</property>
+                      <!--  <property name="column-homogeneous">true</property>-->
                         <child>
                           <object class="GtkButton" id="ExportSyncButton">
                             <property name="label">Export Sync file</property>
