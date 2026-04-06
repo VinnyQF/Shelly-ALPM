@@ -57,7 +57,8 @@
                 <property name="child">
                     <object class="GtkBox" id="MainBox">
                         <property name="orientation">horizontal</property>
-                      
+                        <property name="default-height">600</property>
+                        <property name="default-width">800</property>
                         <child>
                             <object class="GtkBox" id="SidebarBox">
                                 <property name="orientation">vertical</property>
