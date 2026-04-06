@@ -50,22 +50,20 @@
         </section>
     </menu>
     <object class="GtkApplicationWindow" id="MainWindow">
-        <property name="default-height">600</property>
-        <property name="default-width">800</property>
+  
         <property name="title">Shelly</property>
         <child>
             <object class="GtkOverlay" id="MainOverlay">
                 <property name="child">
                     <object class="GtkBox" id="MainBox">
                         <property name="orientation">horizontal</property>
-                        <property name="margin-top">5</property>
-                        <property name="margin-bottom">5</property>
+                      
                         <child>
                             <object class="GtkBox" id="SidebarBox">
                                 <property name="orientation">vertical</property>
                                 <property name="width-request">180</property>
                                 <property name="hexpand">false</property>
-                                <property name="spacing">8</property>
+                                <property name="spacing">4</property>
                                 <style>
                                     <class name="sidebar"/>
                                 </style>
@@ -124,8 +122,8 @@
                                 <child>
                                     <object class="GtkLabel" id="PackagesHeader">
                                         <property name="label">Packages</property>
-                                        <property name="margin-top">10</property>
-                                        <property name="margin-bottom">5</property>
+                                        <property name="margin-top">6</property>
+                                        <property name="margin-bottom">2</property>
                                         <property name="halign">start</property>
                                         <style>
                                             <class name="heading"/>
@@ -217,13 +215,13 @@
                                 <child>
                                     <object class="GtkBox" id="AurBox">
                                         <property name="orientation">vertical</property>
-                                        <property name="spacing">8</property>
+                                        <property name="spacing">4</property>
                                         <property name="halign">fill</property>
                                         <child>
                                             <object class="GtkLabel" id="AurHeader">
                                                 <property name="label">AUR</property>
-                                                <property name="margin-top">10</property>
-                                                <property name="margin-bottom">5</property>
+                                                <property name="margin-top">6</property>
+                                                <property name="margin-bottom">2</property>
                                                 <property name="halign">start</property>
                                                 <style>
                                                     <class name="heading"/>
@@ -314,13 +312,13 @@
                                 <child>
                                     <object class="GtkBox" id="FlatpakBox">
                                         <property name="orientation">vertical</property>
-                                        <property name="spacing">8</property>
+                                        <property name="spacing">4</property>
                                         <property name="halign">fill</property>
                                         <child>
                                             <object class="GtkLabel" id="FlatpakHeader">
                                                 <property name="label">Flatpak</property>
-                                                <property name="margin-top">10</property>
-                                                <property name="margin-bottom">5</property>
+                                                <property name="margin-top">6</property>
+                                                <property name="margin-bottom">2</property>
                                                 <property name="halign">start</property>
                                                 <style>
                                                     <class name="heading"/>
