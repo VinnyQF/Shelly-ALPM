@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using PackageManager.Alpm;
+using PackageManager.Alpm.Events.EventArgs;
 using PackageManager.Aur.Models;
 using PackageManager.Utilities;
 
@@ -29,6 +30,15 @@ public class PkgbuildDiffRequestEventArgs : EventArgs
     public required string NewPkgbuild { get; init; }
     public bool ShowDiff { get; set; }
     public bool ProceedWithUpdate { get; set; } = true;
+}
+
+public class BuildOutputEventArgs : EventArgs
+{
+    public required string PackageName { get; init; }
+    public required string Line { get; init; }
+    public bool IsError { get; init; }
+    public int? Percent { get; init; }
+    public string? ProgressMessage { get; init; }
 }
 
 public enum PackageProgressStatus
@@ -60,6 +70,13 @@ public class AurPackageManager(string? configPath = null)
     public event EventHandler<PkgbuildDiffRequestEventArgs>? PkgbuildDiffRequest;
     public event EventHandler<AlpmQuestionEventArgs>? Question;
     public event EventHandler<AlpmProgressEventArgs>? Progress;
+    public event EventHandler<BuildOutputEventArgs>? BuildOutput;
+    public event EventHandler<AlpmPackageOperationEventArgs>? PackageOperation;
+    public event EventHandler<AlpmScriptletEventArgs>? ScriptletInfo;
+    public event EventHandler<AlpmHookEventArgs>? HookRun;
+    public event EventHandler<AlpmReplacesEventArgs>? Replaces;
+    public event EventHandler<AlpmPacnewEventArgs>? PacnewInfo;
+    public event EventHandler<AlpmPacsaveEventArgs>? PacsaveInfo;
 
     public async Task Initialize(bool root = false, bool useTempPath = false, bool useChroot = false,
         string chrootPath = "/var/lib/shelly/chroot", string tempPath = "", bool showHiddenPackages = false,
@@ -69,6 +86,12 @@ public class AurPackageManager(string? configPath = null)
         _alpm.Initialize(root, useTempPath: useTempPath, tempPath: tempPath, showHiddenPackages: showHiddenPackages);
         _alpm.Question += (sender, args) => Question?.Invoke(this, args);
         _alpm.Progress += (sender, args) => Progress?.Invoke(this, args);
+        _alpm.PackageOperation += (sender, args) => PackageOperation?.Invoke(this, args);
+        _alpm.ScriptletInfo += (sender, args) => ScriptletInfo?.Invoke(this, args);
+        _alpm.HookRun += (sender, args) => HookRun?.Invoke(this, args);
+        _alpm.Replaces += (sender, args) => Replaces?.Invoke(this, args);
+        _alpm.PacnewInfo += (sender, args) => PacnewInfo?.Invoke(this, args);
+        _alpm.PacsaveInfo += (sender, args) => PacsaveInfo?.Invoke(this, args);
         _aurSearchManager = new AurSearchManager(_httpClient);
         _availablePackages = _alpm.GetAvailablePackages().Select(x => x.Name).ToList();
         _useChroot = useChroot;
@@ -443,27 +466,37 @@ public class AurPackageManager(string? configPath = null)
             var buildProcess = CreateBuildProcess(tempPath);
             buildProcess.OutputDataReceived += (sender, e) =>
             {
-                if (e.Data?.Contains('%') == true)
+                if (string.IsNullOrEmpty(e.Data)) return;
+                int? percent = null;
+                string? progressMessage = null;
+                if (e.Data.Contains('%'))
                 {
                     var match = Regex.Match(e.Data, @"\[\s*(?<percent>\d+)%\]\s+(?<message>.+)");
-
-                    if (!match.Success) return;
-                    var percent = match.Groups["percent"].Value;
-                    var message = match.Groups["message"].Value;
-                    if (!string.IsNullOrEmpty(e.Data))
-                        Console.Error.WriteLine($"[AUR_PROGRESS]Percent: {percent}% Message: {message}");
+                    if (match.Success)
+                    {
+                        percent = int.Parse(match.Groups["percent"].Value);
+                        progressMessage = match.Groups["message"].Value;
+                    }
                 }
-                else
+                BuildOutput?.Invoke(this, new BuildOutputEventArgs
                 {
-                    if (!string.IsNullOrEmpty(e.Data))
-                        Console.Error.WriteLine($"[Shelly] makepkg: {e.Data}");
-                }
+                    PackageName = packageName,
+                    Line = e.Data,
+                    IsError = false,
+                    Percent = percent,
+                    ProgressMessage = progressMessage
+                });
             };
 
             buildProcess.ErrorDataReceived += (sender, e) =>
             {
-                if (!string.IsNullOrEmpty(e.Data))
-                    Console.Error.WriteLine($"[Shelly] makepkg error: {e.Data}");
+                if (string.IsNullOrEmpty(e.Data)) return;
+                BuildOutput?.Invoke(this, new BuildOutputEventArgs
+                {
+                    PackageName = packageName,
+                    Line = e.Data,
+                    IsError = true
+                });
             };
 
             buildProcess.Start();
@@ -653,14 +686,37 @@ public class AurPackageManager(string? configPath = null)
         var buildProcess = CreateBuildProcess(tempPath, "--noconfirm" + (_noCheck ? " --nocheck" : ""));
         buildProcess.OutputDataReceived += (sender, e) =>
         {
-            if (!string.IsNullOrEmpty(e.Data))
-                Console.Error.WriteLine($"[Shelly] makepkg: {e.Data}");
+            if (string.IsNullOrEmpty(e.Data)) return;
+            int? percent = null;
+            string? progressMessage = null;
+            if (e.Data.Contains('%'))
+            {
+                var match = Regex.Match(e.Data, @"\[\s*(?<percent>\d+)%\]\s+(?<message>.+)");
+                if (match.Success)
+                {
+                    percent = int.Parse(match.Groups["percent"].Value);
+                    progressMessage = match.Groups["message"].Value;
+                }
+            }
+            BuildOutput?.Invoke(this, new BuildOutputEventArgs
+            {
+                PackageName = packageName,
+                Line = e.Data,
+                IsError = false,
+                Percent = percent,
+                ProgressMessage = progressMessage
+            });
         };
 
         buildProcess.ErrorDataReceived += (sender, e) =>
         {
-            if (!string.IsNullOrEmpty(e.Data))
-                Console.Error.WriteLine($"[Shelly] makepkg error: {e.Data}");
+            if (string.IsNullOrEmpty(e.Data)) return;
+            BuildOutput?.Invoke(this, new BuildOutputEventArgs
+            {
+                PackageName = packageName,
+                Line = e.Data,
+                IsError = true
+            });
         };
         buildProcess.Start();
         buildProcess.BeginOutputReadLine();
@@ -1102,27 +1158,37 @@ public class AurPackageManager(string? configPath = null)
             var buildProcess = CreateBuildProcess(tempPath);
             buildProcess.OutputDataReceived += (sender, e) =>
             {
-                if (e.Data?.Contains('%') == true)
+                if (string.IsNullOrEmpty(e.Data)) return;
+                int? percent = null;
+                string? progressMessage = null;
+                if (e.Data.Contains('%'))
                 {
                     var match = Regex.Match(e.Data, @"\[\s*(?<percent>\d+)%\]\s+(?<message>.+)");
-
-                    if (!match.Success) return;
-                    var percent = match.Groups["percent"].Value;
-                    var message = match.Groups["message"].Value;
-                    if (!string.IsNullOrEmpty(e.Data))
-                        Console.Error.WriteLine($"[AUR_PROGRESS]Percent: {percent}% Message: {message}");
+                    if (match.Success)
+                    {
+                        percent = int.Parse(match.Groups["percent"].Value);
+                        progressMessage = match.Groups["message"].Value;
+                    }
                 }
-                else
+                BuildOutput?.Invoke(this, new BuildOutputEventArgs
                 {
-                    if (!string.IsNullOrEmpty(e.Data))
-                        Console.Error.WriteLine($"[Shelly] makepkg: {e.Data}");
-                }
+                    PackageName = packageName,
+                    Line = e.Data,
+                    IsError = false,
+                    Percent = percent,
+                    ProgressMessage = progressMessage
+                });
             };
 
             buildProcess.ErrorDataReceived += (sender, e) =>
             {
-                if (!string.IsNullOrEmpty(e.Data))
-                    Console.Error.WriteLine($"[Shelly] makepkg error: {e.Data}");
+                if (string.IsNullOrEmpty(e.Data)) return;
+                BuildOutput?.Invoke(this, new BuildOutputEventArgs
+                {
+                    PackageName = packageName,
+                    Line = e.Data,
+                    IsError = true
+                });
             };
 
             buildProcess.Start();
