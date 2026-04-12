@@ -28,24 +28,26 @@ public static class PkgbuildParser
     /// <returns>A PkgbuildInfo object containing the parsed data.</returns>
     public static PkgbuildInfo ParseContent(string pkgbuildContent)
     {
+        var vars = BuildVariableDictionary(pkgbuildContent);
+
         return new PkgbuildInfo
         {
-            PkgName = ParseVariable(pkgbuildContent, "pkgname"),
-            PkgVer = ParseVariable(pkgbuildContent, "pkgver"),
-            PkgRel = ParseVariable(pkgbuildContent, "pkgrel"),
-            Epoch = ParseVariable(pkgbuildContent, "epoch"),
-            PkgDesc = ParseVariable(pkgbuildContent, "pkgdesc"),
-            Url = ParseVariable(pkgbuildContent, "url"),
+            PkgName = ResolveOrParse(pkgbuildContent, vars, "pkgname"),
+            PkgVer = ResolveOrParse(pkgbuildContent, vars, "pkgver"),
+            PkgRel = ResolveOrParse(pkgbuildContent, vars, "pkgrel"),
+            Epoch = ResolveOrParse(pkgbuildContent, vars, "epoch"),
+            PkgDesc = ResolveOrParse(pkgbuildContent, vars, "pkgdesc"),
+            Url = ResolveOrParse(pkgbuildContent, vars, "url"),
             License = ParseArray(pkgbuildContent, "license"),
             Arch = ParseArray(pkgbuildContent, "arch"),
-            Depends = ResolveVariableReferences(pkgbuildContent, ParseArray(pkgbuildContent, "depends")),
-            MakeDepends = ResolveVariableReferences(pkgbuildContent, ParseArray(pkgbuildContent, "makedepends")),
-            CheckDepends = ResolveVariableReferences(pkgbuildContent, ParseArray(pkgbuildContent, "checkdepends")),
-            OptDepends = ResolveVariableReferences(pkgbuildContent, ParseArray(pkgbuildContent, "optdepends")),
-            Provides = ParseArray(pkgbuildContent, "provides"),
+            Depends = ResolveVariableReferences(pkgbuildContent, vars, ParseArray(pkgbuildContent, "depends")),
+            MakeDepends = ResolveVariableReferences(pkgbuildContent, vars, ParseArray(pkgbuildContent, "makedepends")),
+            CheckDepends = ResolveVariableReferences(pkgbuildContent, vars, ParseArray(pkgbuildContent, "checkdepends")),
+            OptDepends = ResolveVariableReferences(pkgbuildContent, vars, ParseArray(pkgbuildContent, "optdepends")),
+            Provides = ResolveVariableReferences(pkgbuildContent, vars, ParseArray(pkgbuildContent, "provides")),
             Conflicts = ParseArray(pkgbuildContent, "conflicts"),
             Replaces = ParseArray(pkgbuildContent, "replaces"),
-            Source = ParseArray(pkgbuildContent, "source"),
+            Source = ResolveVariableReferences(pkgbuildContent, vars, ParseArray(pkgbuildContent, "source")),
             Sha256Sums = ParseArray(pkgbuildContent, "sha256sums"),
             Sha512Sums = ParseArray(pkgbuildContent, "sha512sums"),
             Md5Sums = ParseArray(pkgbuildContent, "md5sums"),
@@ -53,11 +55,176 @@ public static class PkgbuildParser
     }
 
     /// <summary>
+    /// Builds a dictionary of all top-level variable assignments in the PKGBUILD,
+    /// then resolves chained references in multiple passes.
+    /// </summary>
+    private static Dictionary<string, string> BuildVariableDictionary(string content)
+    {
+        var vars = new Dictionary<string, string>();
+
+        // Match: varname="value", varname='value', varname=value (not arrays)
+        var pattern = @"^(\w+)=(?:""([^""]*)""|'([^']*)'|(\S+))";
+        foreach (Match match in Regex.Matches(content, pattern, RegexOptions.Multiline))
+        {
+            var name = match.Groups[1].Value;
+            var value = match.Groups[2].Success ? match.Groups[2].Value :
+                        match.Groups[3].Success ? match.Groups[3].Value :
+                        match.Groups[4].Value;
+
+            // Skip if value is an array opening paren or command substitution (but not arithmetic $((...)
+            if (value.StartsWith("(") || (value.StartsWith("$(") && !value.StartsWith("$(("))) continue;
+
+            vars[name] = value;
+        }
+
+        // Multi-pass resolution for chained variables: _a=1; _b=$_a; _c=$_b
+        for (var pass = 0; pass < 10; pass++)
+        {
+            var changed = false;
+            foreach (var key in vars.Keys.ToList())
+            {
+                var original = vars[key];
+                var resolved = ResolveString(original, vars);
+                if (resolved != original)
+                {
+                    vars[key] = resolved;
+                    changed = true;
+                }
+            }
+            if (!changed) break;
+        }
+
+        return vars;
+    }
+
+    /// <summary>
+    /// Resolves all variable references and arithmetic in a single string.
+    /// </summary>
+    private static string ResolveString(string input, Dictionary<string, string> vars)
+    {
+        // 1. Resolve arithmetic: $((expr))
+        var result = Regex.Replace(input, @"\$\(\(([^)]+)\)\)", match =>
+        {
+            return EvaluateArithmetic(match.Groups[1].Value, vars);
+        });
+
+        // 2. Resolve command substitution: $(command) — can't execute, strip
+        result = Regex.Replace(result, @"\$\([^)]+\)", match =>
+        {
+            System.Console.Error.WriteLine(
+                $"[Shelly] Warning: Cannot evaluate command substitution: {match.Value}");
+            return "";
+        });
+
+        // 3. Resolve ${var} and $var references
+        result = Regex.Replace(result, @"\$\{(\w+)\}|\$(\w+)", match =>
+        {
+            var varName = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
+            return vars.TryGetValue(varName, out var val) ? val : match.Value;
+        });
+
+        return result;
+    }
+
+    /// <summary>
+    /// Evaluates simple bash arithmetic expressions: +, -, *, /, %
+    /// </summary>
+    private static string EvaluateArithmetic(string expr, Dictionary<string, string> vars)
+    {
+        // First resolve any variable references within the expression
+        var resolved = Regex.Replace(expr, @"\$\{?(\w+)\}?", match =>
+        {
+            var name = match.Groups[1].Value;
+            if (vars.TryGetValue(name, out var val) && long.TryParse(val, out _))
+                return val;
+            return match.Value;
+        });
+
+        try
+        {
+            var tokens = Tokenize(resolved);
+            var value = EvalExpression(tokens, 0, out _);
+            return value.ToString();
+        }
+        catch
+        {
+            System.Console.Error.WriteLine($"[Shelly] Warning: Cannot evaluate arithmetic: $(({expr}))");
+            return "0";
+        }
+    }
+
+    private static List<string> Tokenize(string expr)
+    {
+        var tokens = new List<string>();
+        var i = 0;
+        while (i < expr.Length)
+        {
+            if (char.IsWhiteSpace(expr[i])) { i++; continue; }
+            if (char.IsDigit(expr[i]))
+            {
+                var start = i;
+                while (i < expr.Length && char.IsDigit(expr[i])) i++;
+                tokens.Add(expr[start..i]);
+            }
+            else if ("+-*/%()".Contains(expr[i]))
+            {
+                tokens.Add(expr[i].ToString());
+                i++;
+            }
+            else i++;
+        }
+        return tokens;
+    }
+
+    private static long EvalExpression(List<string> tokens, int pos, out int newPos)
+    {
+        var left = EvalTerm(tokens, pos, out pos);
+        while (pos < tokens.Count && (tokens[pos] == "+" || tokens[pos] == "-"))
+        {
+            var op = tokens[pos++];
+            var right = EvalTerm(tokens, pos, out pos);
+            left = op == "+" ? left + right : left - right;
+        }
+        newPos = pos;
+        return left;
+    }
+
+    private static long EvalTerm(List<string> tokens, int pos, out int newPos)
+    {
+        var left = EvalFactor(tokens, pos, out pos);
+        while (pos < tokens.Count && (tokens[pos] == "*" || tokens[pos] == "/" || tokens[pos] == "%"))
+        {
+            var op = tokens[pos++];
+            var right = EvalFactor(tokens, pos, out pos);
+            left = op == "*" ? left * right : op == "/" ? left / right : left % right;
+        }
+        newPos = pos;
+        return left;
+    }
+
+    private static long EvalFactor(List<string> tokens, int pos, out int newPos)
+    {
+        if (pos < tokens.Count && tokens[pos] == "(")
+        {
+            var val = EvalExpression(tokens, pos + 1, out pos);
+            if (pos < tokens.Count && tokens[pos] == ")") pos++;
+            newPos = pos;
+            return val;
+        }
+        if (pos < tokens.Count && long.TryParse(tokens[pos], out var num))
+        {
+            newPos = pos + 1;
+            return num;
+        }
+        newPos = pos + 1;
+        return 0;
+    }
+
+    /// <summary>
     /// Parses a single variable from PKGBUILD content.
     /// </summary>
     private static string? ParseVariable(string content, string variableName)
     {
-        // Match: varname="value" or varname='value' or varname=value
         var pattern = $@"^{variableName}=(?:""([^""]*)""|'([^']*)'|(\S+))";
         var match = Regex.Match(content, pattern, RegexOptions.Multiline);
 
@@ -71,41 +238,39 @@ public static class PkgbuildParser
         return null;
     }
 
+    private static string? ResolveOrParse(string content, Dictionary<string, string> vars, string varName)
+    {
+        return vars.TryGetValue(varName, out var val) ? val : ParseVariable(content, varName);
+    }
+
     /// <summary>
-    /// Parses an array variable from PKGBUILD content.
+    /// Parses an array variable from PKGBUILD content, skipping assignments inside conditional blocks.
     /// </summary>
     private static List<string> ParseArray(string content, string variableName)
     {
         var result = new List<string>();
 
         // Match both: varname=(...) and varname+=(...)
-        var pattern = $@"^{variableName}\+?=\(([^)]*)\)";
+        var pattern = $@"^{Regex.Escape(variableName)}\+?=\(([^)]*)\)";
         var matches = Regex.Matches(content, pattern, RegexOptions.Multiline | RegexOptions.Singleline);
 
         foreach (Match match in matches)
         {
+            // Check if this match is inside a conditional block
+            if (IsInsideConditionalBlock(content, match.Index))
+            {
+                System.Console.Error.WriteLine(
+                    $"[Shelly] Skipping conditional {variableName}+=() at offset {match.Index}");
+                continue;
+            }
+
             var arrayContent = match.Groups[1].Value;
 
             // Strip comments (from # to end of line), respecting quoted strings
             var lines = arrayContent.Split('\n');
-            var cleanedContent = string.Join("\n", lines.Select(line =>
-            {
-                var inSingleQ = false;
-                var inDoubleQ = false;
-                for (var ci = 0; ci < line.Length; ci++)
-                {
-                    var c = line[ci];
-                    if (c == '"' && !inSingleQ) inDoubleQ = !inDoubleQ;
-                    else if (c == '\'' && !inDoubleQ) inSingleQ = !inSingleQ;
-                    else if (c == '#' && !inSingleQ && !inDoubleQ)
-                        return line.Substring(0, ci);
-                }
-
-                return line;
-            }));
+            var cleanedContent = string.Join("\n", lines.Select(StripComment));
 
             // Extract quoted strings and unquoted words
-            // Matches: "string" or 'string' or unquoted_word
             var itemPattern = @"""([^""]*)""" + @"|'([^']*)'|(\S+)";
             var itemMatches = Regex.Matches(cleanedContent, itemPattern);
 
@@ -122,30 +287,71 @@ public static class PkgbuildParser
         return result;
     }
 
-    private static List<string> ResolveVariableReferences(string content, List<string> items)
+    /// <summary>
+    /// Determines if a position in the content is inside an if/then block.
+    /// </summary>
+    private static bool IsInsideConditionalBlock(string content, int position)
+    {
+        var before = content.Substring(0, position);
+        var depth = 0;
+        foreach (Match m in Regex.Matches(before, @"(?:^|;|\s)(if|fi)\b", RegexOptions.Multiline))
+        {
+            var keyword = m.Groups[1].Value;
+            if (keyword == "if") depth++;
+            else if (keyword == "fi") depth = System.Math.Max(0, depth - 1);
+        }
+        return depth > 0;
+    }
+
+    private static string StripComment(string line)
+    {
+        var inSingleQ = false;
+        var inDoubleQ = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+            if (c == '"' && !inSingleQ) inDoubleQ = !inDoubleQ;
+            else if (c == '\'' && !inDoubleQ) inSingleQ = !inSingleQ;
+            else if (c == '#' && !inSingleQ && !inDoubleQ)
+                return line.Substring(0, i);
+        }
+        return line;
+    }
+
+    private static List<string> ResolveVariableReferences(string content, Dictionary<string, string> vars, List<string> items)
     {
         var resolved = new List<string>();
         foreach (var item in items)
         {
+            // Handle array references: ${arrayname[@]}
             var varRefMatch = Regex.Match(item, @"^\$\{(\w+)\[@\]\}$");
             if (varRefMatch.Success)
             {
                 var referencedVar = varRefMatch.Groups[1].Value;
                 var referencedItems = ParseArray(content, referencedVar);
-                resolved.AddRange(ResolveVariableReferences(content, referencedItems));
+                resolved.AddRange(ResolveVariableReferences(content, vars, referencedItems));
             }
             else
             {
-                // Resolve simple variable substitutions like ${var} or $var within strings
-                var resolvedItem = Regex.Replace(item, @"\$\{(\w+)\}|\$(\w+)", match =>
-                {
-                    var varName = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
-                    var varValue = ParseVariable(content, varName);
-                    return varValue ?? match.Value;
-                });
+                var resolvedItem = ResolveString(item, vars);
                 resolved.Add(resolvedItem);
             }
         }
+
+        // Strip dangling version operators or unresolved variable references in version constraints
+        resolved = resolved.Select(dep =>
+        {
+            // Strip version constraint with unresolved $var reference: "pkg>=$_ver" -> "pkg"
+            var cleaned = Regex.Replace(dep, @"(>=|<=|>|<|=)\$[\{]?\w+[\}]?.*$", "");
+            if (cleaned == dep)
+            {
+                // Strip dangling operator: "pkg>=" -> "pkg"
+                cleaned = Regex.Replace(dep, @"(>=|<=|>|<|=)$", "");
+            }
+            if (cleaned != dep)
+                System.Console.Error.WriteLine($"[Shelly] Warning: Stripped unresolved version constraint: {dep} -> {cleaned}");
+            return cleaned;
+        }).ToList();
 
         return resolved;
     }

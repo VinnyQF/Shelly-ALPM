@@ -1475,12 +1475,16 @@ public class AurPackageManager(string? configPath = null)
         }
 
         var user = Environment.GetEnvironmentVariable("SUDO_USER") ?? Environment.UserName;
-        return new System.Diagnostics.Process
+        var path = Environment.GetEnvironmentVariable("PATH") ?? "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin";
+        if (!path.Contains("core_perl"))
+            path = $"/usr/bin/core_perl:/usr/bin/vendor_perl:/usr/bin/site_perl:{path}";
+
+        var process = new System.Diagnostics.Process
         {
             StartInfo = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "sudo",
-                Arguments = $"-u {user} makepkg {makepkgArgs}",
+                Arguments = $"--preserve-env=PATH -u {user} makepkg {makepkgArgs}",
                 WorkingDirectory = tempPath,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -1488,5 +1492,7 @@ public class AurPackageManager(string? configPath = null)
                 CreateNoWindow = true,
             }
         };
+        process.StartInfo.Environment["PATH"] = path;
+        return process;
     }
 }
