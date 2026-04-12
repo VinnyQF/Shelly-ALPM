@@ -60,14 +60,14 @@ public static class PkgbuildParser
         // Match: varname="value" or varname='value' or varname=value
         var pattern = $@"^{variableName}=(?:""([^""]*)""|'([^']*)'|(\S+))";
         var match = Regex.Match(content, pattern, RegexOptions.Multiline);
-        
+
         if (match.Success)
         {
             return match.Groups[1].Success ? match.Groups[1].Value :
-                   match.Groups[2].Success ? match.Groups[2].Value :
-                   match.Groups[3].Value;
+                match.Groups[2].Success ? match.Groups[2].Value :
+                match.Groups[3].Value;
         }
-        
+
         return null;
     }
 
@@ -77,47 +77,48 @@ public static class PkgbuildParser
     private static List<string> ParseArray(string content, string variableName)
     {
         var result = new List<string>();
-        
-        // Match: varname=(...)
-        var pattern = $@"^{variableName}=\(([^)]*)\)";
-        var match = Regex.Match(content, pattern, RegexOptions.Multiline | RegexOptions.Singleline);
-        
-        if (!match.Success)
-            return result;
 
-        var arrayContent = match.Groups[1].Value;
-        
-        // Strip comments (from # to end of line), respecting quoted strings
-        var lines = arrayContent.Split('\n');
-        var cleanedContent = string.Join("\n", lines.Select(line =>
+        // Match both: varname=(...) and varname+=(...)
+        var pattern = $@"^{variableName}\+?=\(([^)]*)\)";
+        var matches = Regex.Matches(content, pattern, RegexOptions.Multiline | RegexOptions.Singleline);
+
+        foreach (Match match in matches)
         {
-            var inSingleQ = false;
-            var inDoubleQ = false;
-            for (var ci = 0; ci < line.Length; ci++)
+            var arrayContent = match.Groups[1].Value;
+
+            // Strip comments (from # to end of line), respecting quoted strings
+            var lines = arrayContent.Split('\n');
+            var cleanedContent = string.Join("\n", lines.Select(line =>
             {
-                var c = line[ci];
-                if (c == '"' && !inSingleQ) inDoubleQ = !inDoubleQ;
-                else if (c == '\'' && !inDoubleQ) inSingleQ = !inSingleQ;
-                else if (c == '#' && !inSingleQ && !inDoubleQ)
-                    return line.Substring(0, ci);
+                var inSingleQ = false;
+                var inDoubleQ = false;
+                for (var ci = 0; ci < line.Length; ci++)
+                {
+                    var c = line[ci];
+                    if (c == '"' && !inSingleQ) inDoubleQ = !inDoubleQ;
+                    else if (c == '\'' && !inDoubleQ) inSingleQ = !inSingleQ;
+                    else if (c == '#' && !inSingleQ && !inDoubleQ)
+                        return line.Substring(0, ci);
+                }
+
+                return line;
+            }));
+
+            // Extract quoted strings and unquoted words
+            // Matches: "string" or 'string' or unquoted_word
+            var itemPattern = @"""([^""]*)""" + @"|'([^']*)'|(\S+)";
+            var itemMatches = Regex.Matches(cleanedContent, itemPattern);
+
+            foreach (Match itemMatch in itemMatches)
+            {
+                var value = itemMatch.Groups[1].Success ? itemMatch.Groups[1].Value :
+                    itemMatch.Groups[2].Success ? itemMatch.Groups[2].Value :
+                    itemMatch.Groups[3].Value;
+
+                result.Add(value);
             }
-            return line;
-        }));
-        
-        // Extract quoted strings and unquoted words
-        // Matches: "string" or 'string' or unquoted_word
-        var itemPattern = @"""([^""]*)""|'([^']*)'|(\S+)";
-        var itemMatches = Regex.Matches(cleanedContent, itemPattern);
-        
-        foreach (Match itemMatch in itemMatches)
-        {
-            var value = itemMatch.Groups[1].Success ? itemMatch.Groups[1].Value :
-                        itemMatch.Groups[2].Success ? itemMatch.Groups[2].Value :
-                        itemMatch.Groups[3].Value;
-            
-            result.Add(value);
         }
-        
+
         return result;
     }
 
@@ -145,6 +146,7 @@ public static class PkgbuildParser
                 resolved.Add(resolvedItem);
             }
         }
+
         return resolved;
     }
 }
@@ -173,6 +175,27 @@ public class PkgbuildInfo
     public List<string> Sha256Sums { get; set; } = new();
     public List<string> Sha512Sums { get; set; } = new();
     public List<string> Md5Sums { get; set; } = new();
+
+    public List<ParsedDependency> ParsedDepends
+    {
+        get => field.Any() ? field : ParseDependencies(ref field, Depends);
+    } = [];
+
+    public List<ParsedDependency> ParsedMakeDepends
+    {
+        get => field.Any() ? field : ParseDependencies(ref field, MakeDepends);
+    } = [];
+
+    public List<ParsedDependency> ParsedCheckDepends
+    {
+        get => field.Any() ? field : ParseDependencies(ref field, CheckDepends);
+    } = [];
+
+    private static List<ParsedDependency> ParseDependencies(ref List<ParsedDependency> storage, List<string> items)
+    {
+        storage.AddRange(items.Select(ParsedDependency.Parse));
+        return storage;
+    }
 
     /// <summary>
     /// Gets all build-time dependencies (depends + makedepends + optionally checkdepends).
