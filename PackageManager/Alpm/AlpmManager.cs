@@ -551,7 +551,6 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
                 AutomaticDecompression = System.Net.DecompressionMethods.All,
                 AllowAutoRedirect = true,
                 MaxAutomaticRedirections = 10,
-                UseProxy = false,
             };
             client = new HttpClient(handler);
             client.Timeout = TimeSpan.FromMinutes(30);
