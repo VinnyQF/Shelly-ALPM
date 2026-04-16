@@ -2247,6 +2247,13 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
         return AlpmReference.PkgVerCmp(a, b);
     }
 
+    public List<string> RemoveCorruptedPackages()
+    {
+        Initialize(true);
+        
+        throw new NotImplementedException();
+    }
+
     private void HandleErrorMessage(IntPtr dataPtr, AlpmErrno error)
     {
         var errorMsg = GetErrorMessage(error);
