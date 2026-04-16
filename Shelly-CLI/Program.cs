@@ -187,6 +187,12 @@ public class Program
                 .WithDescription("Shows Arch news you haven't seen before")
                 .WithExample("news", "--all");
 
+            config.AddCommand<CorruptedPackages>("remove-corruption")
+                .WithDescription("Find and remove corrupted packages")
+                .WithExample("remove-corruption")
+                .WithExample("remove-corruption", "--dry-run")
+                .WithExample("remove-corruption", "--no-confirm");
+
             config.AddBranch("keyring", keyring =>
             {
                 keyring.SetDescription("Manage pacman keyring");

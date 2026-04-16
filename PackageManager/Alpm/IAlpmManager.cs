@@ -90,5 +90,5 @@ public interface IAlpmManager
     /// Removes corrupted packages from the sync database.
     /// </summary>
     /// <returns>Names of corrupted pkgs removed</returns>
-    List<string> RemoveCorruptedPackages();
+    List<string> RemoveCorruptedPackages(bool dryRun = false);
 }

@@ -2247,7 +2247,7 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
         return AlpmReference.PkgVerCmp(a, b);
     }
 
-    public List<string> RemoveCorruptedPackages()
+    public List<string> RemoveCorruptedPackages(bool dryRun = false)
     {
         if (_handle == IntPtr.Zero)
         {
@@ -2261,7 +2261,7 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
         }
 
         var packageFiles = Directory.EnumerateFiles(_config.CacheDir, "*.pkg.tar*",
-            SearchOption.AllDirectories);
+            SearchOption.AllDirectories).Where(x => !x.EndsWith(".sig"));
 
         foreach (var filePath in packageFiles)
         {
@@ -2269,8 +2269,12 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
                 out var pkgPtr);
             if (result == -1)
             {
+                Console.WriteLine(filePath);
                 corruptedPackages.Add(Path.GetFileName(filePath));
-                File.Delete(filePath);
+                if (!dryRun)
+                {
+                    File.Delete(filePath);
+                }
             }
             else if (pkgPtr != IntPtr.Zero)
             {
@@ -2278,7 +2282,7 @@ public class AlpmManager(string configPath = "/etc/pacman.conf") : IDisposable, 
                 {
                     ErrorEvent?.Invoke(this, new AlpmErrorEventArgs("Failed to free package"));
                     //Potentially need to manually release memory here will keep track of usage during testing.
-                    //If I find this later and it's still here you can just remove this as it works as expected.
+                    //If I find this later, and it's still here, you can just remove this as it works as expected.
                 }
             }
         }
