@@ -1003,7 +1003,7 @@ public class HomeWindow(
     private static void PopulateSessionBuffer(TextBuffer buffer, List<string> lines)
     {
         var text = string.Join("\n", lines);
-        buffer.InsertAtCursor(text, text.Length);
+        buffer.SetText(text, text.Length);    
     }
     
     private static string GetIconForCommand(string command)
