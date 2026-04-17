@@ -187,11 +187,11 @@ public class Program
                 .WithDescription("Shows Arch news you haven't seen before")
                 .WithExample("news", "--all");
 
-            config.AddCommand<CorruptedPackages>("remove-corruption")
+            config.AddCommand<CorruptedPackages>("purify")
                 .WithDescription("Find and remove corrupted packages")
-                .WithExample("remove-corruption")
-                .WithExample("remove-corruption", "--dry-run")
-                .WithExample("remove-corruption", "--no-confirm");
+                .WithExample("purify")
+                .WithExample("purify", "--dry-run")
+                .WithExample("purify", "--no-confirm");
 
             config.AddBranch("keyring", keyring =>
             {
