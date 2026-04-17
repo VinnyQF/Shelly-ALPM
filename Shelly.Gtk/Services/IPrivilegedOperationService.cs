@@ -39,6 +39,7 @@ public interface IPrivilegedOperationService
     Task<OperationResult> AppImageConfigureUpdatesAsync(string url, string name, AppImageUpdateType updateType);
     Task<OperationResult> AppImageSyncApp(string name);
     Task<OperationResult> AppImageSyncAll();
+    Task<OperationResult> PurifyCorruptionAsync();
 }
 
 public class OperationResult

@@ -525,6 +525,10 @@ public class PrivilegedOperationService : IPrivilegedOperationService
     public async Task<OperationResult> AppImageSyncAll()
     {
         return await ExecutePrivilegedCommandAsync("Set AppImage's Update Config", "appimage", "sync-meta");
+        
+    public async Task<OperationResult> PurifyCorruptionAsync()
+    {
+        return await ExecutePrivilegedCommandAsync("Delete corrupted packages", "purify");
     }
 
     private void SendDbusMessage(OperationResult result)
