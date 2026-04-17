@@ -35,11 +35,17 @@ public class HomeWindow(
     private Label? _packagePercentLabel;
     private Label? _totalFlatpakLabel;
     private Label? _flatpakPercentLabel;
+    private Label? _sessionLogTitleLabel;
+    private TextView? _sessionLogTextView;
     private ListBox? _operationLogListBox;
     private Button _archNewsButton = null!;
+    private Widget? _activeSessionLogOverlay;
     private Overlay _overlay = null!;
+    private ScrolledWindow? _sessionLogScrolledWindow;
     private uint _updateTimerId;
+    private const int MaxRawLineBytes = 512 * 1024; // 512 KB
     private GObject.SignalHandler<ListBox, ListBox.RowActivatedSignalArgs>? _logRowActivatedHandler;
+
 
     public Widget CreateWindow()
     {
@@ -934,38 +940,69 @@ public class HomeWindow(
         }
     }
     
-    private Widget? _activeSessionLogOverlay;
-
+    private static int EstimateRawLinesSize(List<string> lines) =>
+        lines.Sum(l => Encoding.UTF8.GetByteCount(l));
+    
     private void OnLogRowActivated(ListBoxRow row, List<OperationLogEntry> entries)
     {
+        
         var index = row.GetIndex();
         if (index < 0 || index >= entries.Count) return;
-        
+
         var entry = entries[index];
-        
-        if (_activeSessionLogOverlay is {} oldBox && oldBox.GetParent() == _overlay)
+
+        if (_activeSessionLogOverlay is { } oldBox && oldBox.GetParent() == _overlay)
         {
-            try
-            {
-                    _overlay.RemoveOverlay(oldBox);
-            }
-            catch
-            {
-                
-            }
-            oldBox.Dispose(); 
-            entry.RawLines?.Clear();
+            try { _overlay.RemoveOverlay(oldBox); } catch { }
+            oldBox.Unparent();
+            oldBox.Dispose();
             _activeSessionLogOverlay = null;
         }
-
-        var newBox = SessionLogDialog.ShowSessionLogDialog(_overlay, entry);
-        _activeSessionLogOverlay = newBox;
-
         
-        if (newBox.GetParent() != _overlay) _overlay.AddOverlay(newBox);    
+        if (EstimateRawLinesSize(entry.RawLines) > MaxRawLineBytes)
+        {
+            var toastArgs = new ToastMessageEventArgs("Session log is too large to display");
+            genericQuestionService.RaiseToastMessage(toastArgs);
+            return;
+        }
         
+        var container = new Box();
+        container.SetOrientation(Orientation.Vertical);
+        container.SetSpacing(10);
+        container.SetMarginTop(10);
+        container.SetMarginBottom(10);
+        container.SetMarginStart(10);
+        container.SetMarginEnd(10);
+
+        var titleLabel = Label.New("Session Log");
+        titleLabel.AddCssClass("title-1");
+        titleLabel.Xalign = 0;
+        container.Append(titleLabel);
+        
+        var textView = new TextView();
+        textView.Editable = false;
+        textView.Monospace = true;
+        textView.WrapMode = WrapMode.WordChar;
+        
+        PopulateSessionBuffer(textView.Buffer, entry.RawLines);
+        
+        var scrolledWindow = new ScrolledWindow();
+        scrolledWindow.SetVexpand(true);
+        scrolledWindow.HscrollbarPolicy = PolicyType.Never;
+        scrolledWindow.SetChild(textView);
+        container.Append(scrolledWindow);
+
+        var args = new GenericDialogEventArgs(container);
+        GenericOverlay.ShowGenericOverlay(_overlay, container, args, 700, 500);
+
+        _activeSessionLogOverlay = container;
     }
-
+    
+    private static void PopulateSessionBuffer(TextBuffer buffer, List<string> lines)
+    {
+        var text = string.Join("\n", lines);
+        buffer.InsertAtCursor(text, text.Length);
+    }
     
     private static string GetIconForCommand(string command)
     {
